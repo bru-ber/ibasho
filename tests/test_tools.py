@@ -387,7 +387,10 @@ g.SelectObject(mem, g.CreateCompatibleBitmap(dc, 256, 256))
 g.BitBlt(mem, 0, 0, 256, 256, dc, 0, 0, 0x00CC0020)
 print('colours', len({g.GetPixel(mem, x, y) for x in range(0, 256, 4) for y in range(0, 256, 4)}))
 u.GetClipboardData.restype = C.c_void_p
-opened = u.OpenClipboard(None)   # Windows 11 lets an app container open it and see its formats (2026-11)
+# Windows 11 10.0.26300 lets a tool open the clipboard, see its formats and empty it, despite the job's clipboard
+# limits; reading and setting it still fail (emptying checked by hand, 2026-11-14: in the suite it would wipe the
+# person's clipboard)
+opened = u.OpenClipboard(None)
 print('clipboard', 1 if opened and u.GetClipboardData(13) else 0)   # but not read what's on it
 if opened: u.CloseClipboard()
 """

@@ -88,8 +88,9 @@ two folders. Around that:
   network on, so a tool can't reach the Ibasho daemon (and through it the world), the agent's harness, or any other
   local server.
 - **Screen and input.** It runs on a desktop of its own: it can't capture your screen, read the keyboard, or see or
-  send messages to other programs' windows. It can see whether something is on the clipboard, and in what formats,
-  but not read it.
+  send messages to other programs' windows. It can't read the clipboard or put anything on it. On some Windows 11
+  builds (seen on 10.0.26300) it can see whether something is there, in what formats, and empty it: Windows lets
+  that through despite the clipboard limits Ibasho sets.
 - **Environment.** Its environment variables are built from scratch (Windows paths and a home inside `tools/`),
   so none of yours reach it: no API keys, tokens or paths of yours.
 - **Resources.** The time, output, memory and CPU limits above, at most 16 processes, below-normal priority.
