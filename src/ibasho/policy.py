@@ -318,7 +318,7 @@ MESSAGE_OPS = {
 }
 UPLOAD_OPS = {("IbashoAgent", "upload"), ("IbashoAgent", "uploadMesh")}
 # Ops that take a path on this machine: (read or write, the keys holding paths). Writes go to the pictures folder
-# only; reads come from the life folder or the pictures.
+# only; reads come from the agent's folder or the pictures.
 PATH_OPS = {
     ("LLViewerWindow", "saveSnapshot"): ("write", ("filename",)),
     ("IbashoAgent", "upload"): ("read", ("path",)),
@@ -450,7 +450,7 @@ class Policy:
         self.limiter = limiter or RateLimiter(caps.messages_per_minute)
         self.chat_logs = chat_logs
         self.shots = shots                 # the one folder the viewer may write files into (pictures)
-        self.readable = readable or []     # the folders it may read files from for uploads (life/, the pictures)
+        self.readable = readable or []     # the folders it may read files from for uploads (the agent's folder, the pictures)
         self.widen = Widening(allow)
         self.reserved = 0   # L$ in requests still waiting for the viewer's answer
 

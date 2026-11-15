@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import re
 import socket
 import threading
 import time
+from collections import deque
 from pathlib import Path
 
 import pytest
@@ -15,12 +18,31 @@ from ibasho.api import Api
 from fake_viewer import FakeViewer
 
 
+PORT_SHARES = 8
+_worker = re.sub(r"\D", "", os.environ.get("PYTEST_XDIST_WORKER", ""))   # "gw3" under pytest-xdist
+_port_share = int(_worker or 0) % PORT_SHARES
+_ports_given: deque[int] = deque(maxlen=64)
+
+
 def free_port() -> int:
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    p = s.getsockname()[1]
-    s.close()
-    return p
+    """A port nothing listens on, for a daemon the test starts a moment later. The system may hand a port one process
+    has just closed to the next that asks (Windows does, and to the same process twice when several ask at once), so
+    test processes running side by side (pytest-xdist) each keep to their own share of the numbers, and none takes one
+    it was given lately."""
+    held = []
+    try:
+        for _ in range(1000):
+            s = socket.socket()
+            s.bind(("127.0.0.1", 0))
+            held.append(s)   # kept open while looking, so the system moves on to another number
+            p = s.getsockname()[1]
+            if p % PORT_SHARES == _port_share and p not in _ports_given:
+                break
+        _ports_given.append(p)
+        return p
+    finally:
+        for s in held:
+            s.close()
 
 
 def write_config(home: Path, **over) -> config_mod.Config:

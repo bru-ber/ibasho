@@ -76,7 +76,7 @@ def pythonw() -> str:
 
 def ibasho_args(*args) -> list[str]:
     """`ibasho ARGS` as a background Python of its own. -P keeps the working folder off the module path, and
-    `spawn` starts it in its log's folder anyway: run from the agent's life folder, `-m ibasho` would otherwise
+    `spawn` starts it in its log's folder anyway: run from the agent's folder, `-m ibasho` would otherwise
     import an `ibasho` the agent wrote there, in place of the daemon."""
     return [pythonw(), "-P", "-m", "ibasho", *args]
 

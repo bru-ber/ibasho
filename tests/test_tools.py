@@ -124,11 +124,10 @@ def test_session_settings_deny_tools_unless_usable(plain, tmp_path, monkeypatch)
 
 def test_wake_prompt_mentions_tools_only_when_usable(plain, monkeypatch):
     cfg = config_mod.load(write(plain, enabled=True, network=False))
-    ks = load_keeper(cfg)
-    assert tools_cli.wake_note(cfg, ks, "Sam") == ""
+    assert tools_cli.wake_note(cfg, "Sam") == ""
     monkeypatch.setattr(tools_cli.runtime, "ready", lambda rdir: True)
     monkeypatch.setattr(tools_cli.sandbox, "supported", lambda: None)
-    note = tools_cli.wake_note(cfg, ks, "Sam")
+    note = tools_cli.wake_note(cfg, "Sam")
     assert "ibasho tool NAME" in note and "no network" in note and "Sam can change" in note
     text = prompts.wake(name="A", grid="g", person="Sam", reason="r", session="s" * 8, life="L",
                         handoff_note="now.md", has_handoff=False, allowance=None, notes=[], tools=note)
@@ -136,12 +135,23 @@ def test_wake_prompt_mentions_tools_only_when_usable(plain, monkeypatch):
     assert "ibasho tool" not in prompts.wake(name="A", grid="g", person="Sam", reason="r", session="s" * 8, life="L",
                                             handoff_note="now.md", has_handoff=False, allowance=None, notes=[])
     write(plain, enabled=False)
-    assert tools_cli.wake_note(config_mod.load(plain / "config.toml"), ks, "Sam") == ""
+    assert tools_cli.wake_note(config_mod.load(plain / "config.toml"), "Sam") == ""
 
 
 def test_new_life_folders_have_no_tools_folder(tmp_path):
     assert runner.ensure_life(tmp_path / "life")
     assert not (tmp_path / "life" / "tools").exists()
+
+
+def test_the_keeper_starts_its_folder_over_tools_alone(tmp_path):
+    # `ibasho tool setup` makes only tools/ (an agent in its own harness keeps its memory elsewhere); the keeper set
+    # up later still starts the folder from the template around it
+    life = tmp_path / "life"
+    (life / "tools").mkdir(parents=True)
+    (life / "tools" / "mine.py").write_text("")
+    assert runner.ensure_life(life)
+    assert (life / "README.md").is_file() and (life / "tools" / "mine.py").is_file()
+    assert not runner.ensure_life(life)
 
 
 # ---------- the sandbox, for real ----------
@@ -200,6 +210,7 @@ def box(tmp_path_factory, pytestconfig):
     b.configure()
     code = main(["--config", str(b.cfgpath), "tool", "setup", "--zip", str(z)])
     assert code == 0
+    assert [p.name for p in (b.home / "life").iterdir()] == ["tools"]   # tools only: no memory folder planted
     yield b
     assert main(["--config", str(b.cfgpath), "tool", "setup", "--remove"]) == 0
     assert sandbox.profile_folder(sandbox.container_name(b.home)) is None
@@ -375,7 +386,10 @@ mem = g.CreateCompatibleDC(dc)
 g.SelectObject(mem, g.CreateCompatibleBitmap(dc, 256, 256))
 g.BitBlt(mem, 0, 0, 256, 256, dc, 0, 0, 0x00CC0020)
 print('colours', len({g.GetPixel(mem, x, y) for x in range(0, 256, 4) for y in range(0, 256, 4)}))
-print('clipboard', u.OpenClipboard(None))
+u.GetClipboardData.restype = C.c_void_p
+opened = u.OpenClipboard(None)   # Windows 11 lets an app container open it and see its formats (2026-11)
+print('clipboard', 1 if opened and u.GetClipboardData(13) else 0)   # but not read what's on it
+if opened: u.CloseClipboard()
 """
 
 

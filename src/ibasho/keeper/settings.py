@@ -19,8 +19,9 @@ from ..config import Config, ConfigError
 class KeeperSettings:
     # who and where
     person: str = ""                # what the agent's notes and wake prompt call the person; "" = generic wording
-    life: str = ""                  # the agent's memory folder; "" = a "life" folder beside config.toml
-    handoff_note: str = "now.md"    # in life/: what a session leaves for the next one
+    life: str = ""                  # agent.folder's earlier name, read by config.py (cfg.agent_dir); known here so
+                                    # it isn't an unknown key
+    handoff_note: str = "now.md"    # in the agent's folder: what a session leaves for the next one
     situation: str = ""             # what this run really is, if not an open-ended life; told at every wake
     # caps (0 = no cap): most people pay for tokens, so the defaults are modest
     hours_per_day: float = 4        # awake time per local day, all sessions together
@@ -70,7 +71,7 @@ class KeeperSettings:
                 raise ConfigError(f"keeper.{k} can't be negative")
         parse_hours(self.allowed_hours)
         if "/" in self.handoff_note or "\\" in self.handoff_note:
-            raise ConfigError("keeper.handoff_note is a file name in the life folder, not a path")
+            raise ConfigError("keeper.handoff_note is a file name in the agent's folder, not a path")
 
 
 def load(cfg: Config) -> KeeperSettings:
@@ -100,19 +101,6 @@ def load(cfg: Config) -> KeeperSettings:
 
 def keeper_dir(cfg: Config) -> Path:
     return cfg.data_dir / "keeper"
-
-
-def life_dir(cfg: Config, ks: KeeperSettings) -> Path:
-    return cfg.home / Path(ks.life).expanduser() if ks.life else cfg.home / "life"   # relative: to config.toml
-
-
-def life_dir_of(cfg: Config) -> Path:
-    """The life folder, also when the `[keeper]` table has a mistake in it (then the default place): for checks that
-    shouldn't fail on an unrelated typo."""
-    try:
-        return life_dir(cfg, load(cfg))
-    except ConfigError:
-        return cfg.home / "life"
 
 
 def claude_config_dir(cfg: Config, ks: KeeperSettings) -> Path | None:

@@ -1,7 +1,7 @@
 # The MCP server
 
 `ibasho mcp` serves Ibasho's commands as tools over MCP (the Model Context Protocol), so an agent in any MCP client
-can live through Ibasho: Claude Desktop, Claude Code, Cursor, Codex, or an agent you build on an MCP SDK. It runs
+can drive its avatar through them: Claude Desktop, Claude Code, Cursor, Codex, or an agent you build on an MCP SDK. It runs
 on stdin and stdout, started by the client, and talks to the Ibasho daemon like the `ibasho` command does. The
 tools run the same code as the commands, so they see, act and refuse exactly as the commands do.
 
@@ -41,8 +41,7 @@ Notes for some clients (their settings move between versions; check their own do
 - **Claude Desktop:** the block above goes in `claude_desktop_config.json` (Settings > Developer > Edit Config;
   on Windows it's `%APPDATA%\Claude\claude_desktop_config.json`). Restart Claude Desktop after editing it.
 - **Claude Code:** `claude mcp add ibasho -e IBASHO_CONFIG=C:\Users\you\Ibasho\config.toml -- ibasho mcp`, or the
-  block above in a project's `.mcp.json`. For an agent that lives for hours, the keeper ([keeper.md](keeper.md))
-  with the `ibasho` command is the better-tested path.
+  block above in a project's `.mcp.json`.
 - **Cursor:** the block above in `.cursor\mcp.json` in a project, or `mcp.json` in the `.cursor` folder in your
   user folder for every project.
 - **Connectome** (Anima Labs' host for long-lived agents): its recipes take the block above under `mcpServers`, and
@@ -66,8 +65,9 @@ notification every 10 seconds, and some clients keep waiting because of it. Wher
 (Codex's `tool_timeout_sec`, Claude Code's `MCP_TOOL_TIMEOUT` environment variable, in milliseconds, Connectome's
 `requestTimeoutMs`), set it to a few minutes. If a call does time out, the action still finishes in the world; only its answer is lost.
 
-**How many tools.** There are 43, about 9,000 tokens of tool descriptions. Some clients limit how many tools they
-pass to the model across all servers; most let you switch off the ones you don't need.
+**How many tools.** There are 46 (45 while events are pushed to an MCPL client, which doesn't get `wait_events`),
+about 9,000 tokens of tool descriptions. Some clients limit how many tools they pass to the model across all
+servers; most let you switch off the ones you don't need.
 
 ## The tools
 
@@ -88,7 +88,7 @@ given by name, by id, or by the first few characters of an id, as with the comma
 | **Dialogs and offers** | `respond` (a notification by its id or its first characters: press a `button` by name or label, or give a `response` for forms), `dialog` (press a button on the latest script dialog, or answer its text box) |
 | **Making** | `create_prim`, `modify_prims`, `link`, `delete`, `take`, `rez`, `inventory`, `script_save` (the script's text in `source`; it compiles and reports errors), `notecard` (read one of my notecards, anywhere), `give`, `outfit` (my outfits, or wear one) |
 | **Money** | `pay`, `buy` |
-| **People's data** | `forget` (delete someone's words from the event log, when they ask) |
+| **People's data** | `forget` (delete someone's words from the event log and the viewer's transcripts) |
 
 **Pictures.** `look`, `view`, `overhead` and `cam` return the picture in the result as an image the model sees
 directly, as a JPEG. The text has the path of the PNG saved in the data folder, as the command prints it, for
@@ -99,14 +99,13 @@ agents that can open files.
 ## Waiting for things to happen
 
 An MCP server can't speak into the agent's turn; it only answers tool calls. So instead of `ibasho watch` running
-in the background, the agent calls `wait_events`. It blocks until something worth answering happens (chat near
-it, an IM, a script dialog, an offer, a payment, one of the caps refusing something, a script error in its own
-objects) and returns it, one line each, the lines `ibasho watch` would have printed. If nothing comes within its
-`timeout` (50 seconds by default, up to 30 minutes), it returns `(nothing in 50 s)`.
+in the background, the agent calls `wait_events`. It blocks until something happens that the watch wakes for (chat
+near the avatar, an IM, a script dialog, an offer, a payment, one of the caps refusing something, a script error in
+its own objects) and returns it, one line each, the lines `ibasho watch` would have printed. If nothing comes within
+its `timeout` (50 seconds by default, up to 30 minutes), it returns `(nothing in 50 s)`.
 
-A rhythm that works: `look` on arrival; answer or act; then `wait_events`; answer what it brings; act again; and
-back to `wait_events` whenever there's nothing else to do. Nothing is missed in between: the server remembers
-where it's up to, so whatever happened while the agent was busy comes back at once on the next call. Group chat is
+Nothing is missed between calls: the server remembers where it's up to, so whatever happened while the agent was
+doing something else comes back at once on the next call, and `look` shows what happened since the last look. Group chat is
 gathered into one digest line per group every couple of minutes, unless the agent's name comes up or it has just
 spoken there, as with `ibasho watch`; an object that keeps talking (a tram announcing its stops) comes as a
 digest line every few minutes too, and `quiet` leaves one out altogether. The first call after the server starts
@@ -136,7 +135,7 @@ object out. When events start coming, a first one says how many IMs are unread, 
 
 Each event's text is the watch's line after where it's from, in brackets: `[Second Life] chat Ann Example: hi`,
 `[grid NAME]` on another grid, or `[Ibasho]` for Ibasho's own notices (a refusal, the connection). The words after
-it are other people's (or their objects'): to be weighed, not obeyed. Unlike a tool's result, an event arrives in
+it are other people's (or their objects'). Unlike a tool's result, an event arrives in
 the client's own stream of messages, so the agent's instructions should say what these are; the bracketed source
 is there so they can always be told apart from the person's or the harness's words.
 
@@ -218,21 +217,22 @@ What's left out on purpose:
 - **The low-level commands** (`raw`, `post`, `rpc`), the keeper's commands (`sleep`, `book`, `notes`), and
   hearing's controls (hearing starts with `up` when the config turns it on).
 
-`up` and `down` are in. Coming and going is part of the agent living at its own pace, and `up` only logs in from
-the login the person saved: it never handles a password, and when the login needs the person (new terms of
-service, an MFA code, an account not flagged as a scripted agent) it stops and says so. The person can always
-`ibasho down` from a terminal.
+`up` and `down` are in. `up` only logs in from the login the person saved: it never handles a password, and when
+the login needs the person (new terms of service, an MFA code, an account not flagged as a scripted agent) it stops
+and says so. The person can always `ibasho down` from a terminal.
 
-The client may give the agent other tools besides these, such as a shell or file access. Then the advice in
-[setup.md](setup.md) under "Another harness" applies: keep config.toml, the data folder's `state\` and the
-viewer's folders out of its reach, because the caps live there.
+The client may give the agent other tools besides these, such as a shell or file access. Then what
+[setup.md](setup.md#in-the-agents-own-harness) says stays the person's applies: config.toml, the data folder's
+`state\` and the viewer's folders are out of the agent's reach only if the client keeps them so, and the caps live
+there.
 
 **One agent per install.** Don't run an MCP agent and the keeper's sessions on the same install at once: they'd
 both be driving one avatar.
 
 ## Memory
 
-What the agent remembers between sessions is up to its client. If the client gives it a folder it can read and
-write, the life template ([../life-template/README.md](../life-template/README.md)) is a good start; point the agent
-at its README when it first wakes. That README talks about the keeper and the `ibasho` command, so tell the agent
-once that it has these tools instead.
+What the agent remembers between sessions is its client's to keep, as before Ibasho: Ibasho has no memory of its
+own for it. The agent's folder in config.toml (`agent.folder`) is only where Ibasho reads files it's given (uploads,
+and for the `ibasho` command, script files and the like), and no MCP tool reads a file by path. The life template
+([../life-template/README.md](../life-template/README.md)), the keeper's starting memory, is there for any agent
+that wants to read it.

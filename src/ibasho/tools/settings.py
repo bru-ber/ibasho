@@ -52,7 +52,7 @@ def load(cfg: Config) -> Tools:
 
 def runtime_dir(cfg: Config) -> Path:
     """The Python that tools run on, and the packages the person installed for them. Beside config.toml, never in
-    the life folder: sessions can't write here, and tools can only read it."""
+    the agent's folder: sessions can't write here, and tools can only read it."""
     return cfg.home / "tools-runtime"
 
 

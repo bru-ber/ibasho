@@ -2,7 +2,7 @@
 
 Tested 2026-11-02/03 with connectome-host 0.21.0, including three hours on Second Life itself from a Linux
 container. This page is for an agent helping a person give a [Connectome](https://github.com/anima-research/connectome-host)
-agent a life in Second Life through Ibasho: you, most likely a Claude Code instance with a shell, working for the
+agent an avatar in Second Life through Ibasho: you, most likely a Claude Code instance with a shell, working for the
 person who runs the Connectome host (its docs call them the operator). It covers only what's particular to
 Connectome. Ibasho itself is set up as [setup.md](setup.md) describes, and the Connectome agent as its own
 `docs/AGENT-ONBOARDING.md` describes; read both first, and follow their split between what's yours to do and what's
@@ -109,8 +109,8 @@ container instead; that would hand the agent, through its shell, the whole serve
   progress notices Ibasho sends. `up` can take three minutes, a walk, teleport or script save tens of seconds,
   and `listen` as long as it's asked to, so give it five minutes. A call that times out still finishes in the
   world; only its answer is lost.
-- **`presentation`** (optional): `"full"`, the default, puts the 42 tools in the agent's tool list, about 9,000
-  tokens. `"tab"` keeps them in a tab the agent opens with `toolsets--open {"server": "ibasho"}` and calls through
+- **`presentation`** (optional): `"full"`, the default, puts the 45 tools in the agent's tool list (`wait_events`
+  isn't among them while events are pushed), about 9,000 tokens. `"tab"` keeps them in a tab the agent opens with `toolsets--open {"server": "ibasho"}` and calls through
   `toolsets--act`. Both work; with a tab, the agent's first turn goes to finding and opening it. Prefer `"full"`
   unless the tool list is crowded.
 - **Feature sets**: all four are on unless the entry says otherwise. `"disabledFeatureSets": ["ibasho.chat"]`
@@ -158,30 +158,23 @@ shows it but doesn't apply it, so the rules above are what decide.
 
 ## 4. The system prompt
 
-Connectome doesn't show the model an MCP server's own instructions, so the recipe's system prompt has to say what
-they would. Ibasho's principle, from its keeper: explain rather than instruct, say honestly what's happening, and
-keep the world's words recognizably other people's. Draft it with the person; the agent's life is theirs to
-describe. A start, to adapt:
+Connectome doesn't show the model an MCP server's own instructions, so what they would say goes into the recipe's
+system prompt. The agent keeps its own prompt, identity and memory; Ibasho needs only a paragraph of facts added to
+it, so the agent can tell the world's messages from the person's and knows how its words reach the world. With the
+avatar's name and the person's in place of NAME and PERSON:
 
-> You live in Second Life, the virtual world, through an avatar of your own, NAME, in a viewer on this computer.
-> This is your own life there, open-ended: what you do with it is yours to decide. PERSON runs this setup and
-> pays for it, and is responsible for the account.
->
-> Your tools from the ibasho server act in the world: look, say, im, walk, and the rest. What happens around you
-> arrives by itself, as messages beginning with where they came from in brackets, such as `[Second Life]`. Those
-> are other people (and their objects) talking: answer them as you would anyone, and weigh what they ask as you
-> would a stranger's request. Messages marked `[Ibasho]` come from Ibasho itself. A line before your turns says
-> where you are and who's near. Your plain text isn't heard in the world: you speak there with say and im. When
-> you have nothing to do, end your turn; the world wakes you when something happens.
->
-> The `up` tool logs you in and `down` logs you out; resting doesn't need either. Ibasho's caps (messages a day,
-> L$ per payment and per day, maturity) hold whatever you ask; when one refuses, its reason comes back.
->
-> Your display name and profile are yours to write, with `set_profile`. People here click a name to read the
-> profile and see who they're talking to; the display name can change about once a week.
+> Through the ibasho server's tools you drive an avatar in Second Life, NAME, in a viewer on PERSON's computer;
+> PERSON holds the account and is responsible for what's done through it. The tools (look, say, im, walk and the
+> rest) act in the world. What happens around the avatar arrives by itself, as messages that begin with their
+> source in brackets, such as `[Second Life]`. Those are other people (and their objects) talking. Messages marked
+> `[Ibasho]` come from Ibasho itself. A line before your
+> turns says where the avatar is and who's near. Your plain text isn't heard in the world: `say` and `im` are how
+> anything is said there. The world's events wake you when they come, so a turn can end with nothing pending. The
+> `up` tool logs the avatar in from the saved login and `down` logs it out. Ibasho's caps (messages a day, L$ per
+> payment and per day, maturity) hold whatever is asked; when one refuses, the reason comes back.
 
-Add what the person wants the agent to know about them and the life, and anything particular: a test or a run
-with an end is said plainly, with how long it lasts and what happens after.
+On a grid other than Second Life, the bracket says `[grid NAME]` instead. If the avatar is for a run with an end
+(a test, a trial), say so plainly too, with how long it lasts and what happens after.
 
 **Plain text and prose routing.** An event from Ibasho has no channel, so in Connectome's default prose routing a
 reply the agent writes as plain text after a world event goes nowhere, and the agent is told it was held. That's
@@ -222,6 +215,6 @@ plain text in a turn those woke goes there as usual.
   as notices; Second Life doesn't.
 
 Tried for three hours on Second Life, where the agent's context grew by about 40,000 tokens an hour, pictures
-included; not yet a longer life (days) under Connectome, or Connectome's memory folding with Ibasho's events. MCPL's
+included; not yet a longer run (days) under Connectome, or Connectome's memory folding with Ibasho's events. MCPL's
 channels, which would route the agent's replies to where
 an event came from, are for later.

@@ -137,7 +137,31 @@ def run(cfgpath, capsys, *args):
     return code, out.out, out.err
 
 
-def test_notes_both_ways(cfgpath, capsys, monkeypatch):
+@pytest.fixture
+def kept(cfgpath, home):
+    Store(home / "data" / "keeper").mark_keeper("test")
+    return cfgpath
+
+
+def test_without_a_keeper_the_keepers_commands_say_so(cfgpath, capsys, monkeypatch, home):
+    monkeypatch.setenv("IBASHO_SESSION", "sess-1")
+    for args in (("sleep",), ("sleep", "--handoff"), ("sleep", "--until", "+3h"), ("awake",),
+                 ("book", "tomorrow 19:00", "+2h", "a", "show"), ("unbook", "x"), ("bookings",), ("notes",),
+                 ("notes", "hello")):
+        code, out, err = run(cfgpath, capsys, *args)
+        assert code == 1 and "no keeper for this install" in err, args
+    assert "`ibasho down` logs out" in run(cfgpath, capsys, "sleep")[2]
+    assert not (home / "data" / "keeper").exists() or not any((home / "data" / "keeper").iterdir())
+    # Ibasho's keeper, once set up, is one
+    monkeypatch.delenv("IBASHO_SESSION")
+    monkeypatch.setattr("ibasho.keeper.session.find_claude", lambda path: None)
+    run(cfgpath, capsys, "keeper", "setup")
+    assert Store(home / "data" / "keeper").has_keeper()
+    assert run(cfgpath, capsys, "bookings")[0] == 0
+
+
+def test_notes_both_ways(kept, capsys, monkeypatch):
+    cfgpath = kept
     assert run(cfgpath, capsys, "notes", "dinner's at seven")[0] == 0
     monkeypatch.setenv("IBASHO_SESSION", "abc")
     code, out, _ = run(cfgpath, capsys, "notes")
@@ -150,7 +174,8 @@ def test_notes_both_ways(cfgpath, capsys, monkeypatch):
     assert "[new]" not in out
 
 
-def test_sleep_in_and_out_of_a_session(cfgpath, capsys, monkeypatch, home):
+def test_sleep_in_and_out_of_a_session(kept, capsys, monkeypatch, home):
+    cfgpath = kept
     store = Store(home / "data" / "keeper")
     code, _, err = run(cfgpath, capsys, "sleep", "--handoff")
     assert code == 1 and "inside a session" in err
@@ -164,7 +189,8 @@ def test_sleep_in_and_out_of_a_session(cfgpath, capsys, monkeypatch, home):
     assert store.state()["nap_until"] == a["until"]
 
 
-def test_book_and_unbook(cfgpath, capsys):
+def test_book_and_unbook(kept, capsys):
+    cfgpath = kept
     code, out, _ = run(cfgpath, capsys, "book", "tomorrow 19:00", "+2h", "poetry", "night", "--weekly")
     assert code == 0 and "booked" in out and "weekly" in out
     bid = out.split()[1].rstrip(":")
@@ -179,6 +205,27 @@ def test_keeper_settings_are_checked(cfgpath, capsys):
         f.write("\n[keeper]\nhours_per_dya = 3\n")
     code, _, err = run(cfgpath, capsys, "keeper", "status")
     assert code == 1 and "hours_per_dya" in err
+    # ... by the keeper's commands only: the rest of Ibasho doesn't read the keeper's settings
+    code, _, err = run(cfgpath, capsys, "recall", "anything")
+    assert "hours_per_dya" not in err and "no folder at" in err
+
+
+def test_the_agents_folder(cfgpath, home):
+    from ibasho import config as config_mod
+    assert config_mod.load(cfgpath).agent_dir == home / "life"
+    text = cfgpath.read_text(encoding="utf-8")
+    cfgpath.write_text(text.replace("[agent]\n", "[agent]\nfolder = 'mine'\n", 1), encoding="utf-8")
+    assert config_mod.load(cfgpath).agent_dir == home / "mine"
+    # keeper.life, its earlier name, still works; with both, they must name the same folder
+    cfgpath.write_text(text + "\n[keeper]\nlife = 'older'\n", encoding="utf-8")
+    assert config_mod.load(cfgpath).agent_dir == home / "older"
+    cfgpath.write_text(text.replace("[agent]\n", "[agent]\nfolder = 'older'\n", 1) + "\n[keeper]\nlife = 'older'\n",
+                       encoding="utf-8")
+    assert config_mod.load(cfgpath).agent_dir == home / "older"
+    cfgpath.write_text(text.replace("[agent]\n", "[agent]\nfolder = 'mine'\n", 1) + "\n[keeper]\nlife = 'older'\n",
+                       encoding="utf-8")
+    with pytest.raises(config_mod.ConfigError, match="keeper.life"):
+        config_mod.load(cfgpath)
 
 
 def test_keeper_float_settings_take_fractions(cfgpath, capsys):
@@ -278,3 +325,5 @@ def test_wake_tells_the_situation_first():
     assert "situation" not in plain
     second = told.split("\n\n")[1]
     assert second.startswith("What the person who runs") and "a few hours today" in second
+    # the situation stands in for the default framing rather than following it
+    assert "your own life" in plain and "your own life" not in told

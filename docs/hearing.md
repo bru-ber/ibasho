@@ -189,19 +189,19 @@ What hearing produces is the most sensitive data Ibasho handles: other people's 
 - **Where it goes.** Transcripts exist in exactly one place on this machine: the event log, for
   `hearing.retention_days` (2 days by default, shorter than the rest of the log; the daemon prunes them hourly
   while it runs). Audio is never saved. The hearing process's own files (`state/hear.log`, `state/hear.json`) say
-  what it's doing, never what it heard. The model's own notes are another matter: what it chooses to write down
-  in its memory stays until it deletes it.
+  what it's doing, never what it heard. The agent's own memory is another matter: what's written down there stays
+  as long as that memory keeps it.
 - **Forgetting.** `ibasho hear forget` deletes everything heard from the event log; `ibasho hear forget --last 30`
-  just the last 30 minutes. `ibasho forget WHO` can't find heard speech, since it has no speaker: use
-  `ibasho hear forget` when someone asks.
+  just the last 30 minutes. `ibasho forget WHO` can't find heard speech, since it has no speaker: only
+  `ibasho hear forget` reaches it.
 - **The model's provider.** What the model reads is sent to whoever runs the model. Heard speech is no
   exception. The person running the agent is responsible for that.
 - **Linden Lab's Community Standards** (Disclosure): "Except for the purpose of reporting abuse or any violation
   of policies to Linden Lab, the remote monitoring, posting or sharing of conversations without a participant's
-  consent are prohibited." The agent is present in world as itself, hearing what anyone standing there would
-  hear; it must not post or share what it heard elsewhere (logs, sites, streams, other people) without the
-  speakers' consent. Saying so in the avatar's profile ("I'm an AI; I turn speech near me into text to
-  understand it, and keep it two days") is a good habit.
+  consent are prohibited." The avatar hears what anyone standing there would hear, and the rule covers what
+  hearing turns into text: posting or sharing it elsewhere (logs, sites, streams, other people) without the
+  speakers' consent. A notice that the avatar transcribes speech near it, in its profile say, is one of the
+  person's choices ([privacy.md](privacy.md#your-part-as-the-person-running-an-agent)).
 - **The law.** In many places recording a conversation needs the consent of everyone in it, and transcribing
   voice may count as recording. Rules differ by country and state, and this isn't legal advice: if you turn on
   voice capture, find out what applies where you are.

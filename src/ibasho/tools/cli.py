@@ -1,7 +1,8 @@
 """`ibasho tool`: the agent runs its own tools; the person sets the sandbox up and installs packages for it.
 
 `ibasho tool NAME [ARGS...]` and `ibasho tool list` are the agent's. `ibasho tool setup` and `ibasho tool install` are the
-person's: refused inside keeper sessions (and denied in the sessions' permission settings too).
+person's: refused in the agent's sessions (IBASHO_SESSION set), and in the keeper's sessions by their permission settings
+too.
 """
 
 from __future__ import annotations
@@ -17,7 +18,6 @@ from pathlib import Path
 
 from ..cli.common import Ctx, Fail
 from ..config import ConfigError
-from ..keeper import settings as keeper_settings
 from . import runtime, sandbox, settings as tools_settings
 
 PERSON_ONLY = ("setup", "install")
@@ -28,7 +28,7 @@ NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 def register(sub):
     p = sub.add_parser(
         "tool", help="run one of my own tools: `ibasho tool NAME [ARGS]`, `ibasho tool list` (docs/tools.md)",
-        description="Run a tool from the life folder's tools/ (NAME.py, or a folder NAME/ with __main__.py) in a "
+        description="Run a tool from the agent's folder's tools/ (NAME.py, or a folder NAME/ with __main__.py) in a "
                     "sandbox: it sees only that folder, has no network unless the person turned it on, and stops at "
                     "the time and output limits in config.toml. `ibasho tool list` shows the tools and the limits. "
                     "For the person: `ibasho tool setup [--zip FILE] [--remove]` makes (or removes) the sandbox and "
@@ -43,7 +43,8 @@ def tool(ctx: Ctx, a):
         return list_tools(ctx)
     if a.name in PERSON_ONLY:
         if os.environ.get("IBASHO_SESSION"):
-            raise Fail(f"`ibasho tool {a.name}` is for the person who runs Ibasho, not for keeper sessions")
+            raise Fail(f"`ibasho tool {a.name}` is for the person who runs Ibasho, and refused in the agent's sessions "
+                       "(IBASHO_SESSION is set)")
         return setup(ctx, a.args) if a.name == "setup" else install(ctx, a.args)
     return run_tool(ctx, a.name, a.args)
 
@@ -54,12 +55,11 @@ class Place:
     def __init__(self, ctx: Ctx):
         self.cfg = ctx.cfg
         try:
-            self.ks = keeper_settings.load(self.cfg)
             self.ts = tools_settings.load(self.cfg)
         except ConfigError as e:
             raise Fail(str(e)) from None
-        self.life = keeper_settings.life_dir(self.cfg, self.ks)
-        self.tools = tools_settings.tools_dir(self.life)
+        self.folder = self.cfg.agent_dir
+        self.tools = tools_settings.tools_dir(self.folder)
         self.rdir = tools_settings.runtime_dir(self.cfg)
         self.container = sandbox.container_name(self.cfg.home)
 
@@ -80,14 +80,14 @@ def within(path: Path, folder: Path) -> bool:
     return p == f or p.startswith(f.rstrip("\\/") + os.sep)
 
 
-def layout_problem(cfg, life: Path) -> str | None:
-    """Sessions can write the life folder and the snapshots folder. The config and the tools runtime must be outside
-    both, or an agent could widen its own sandbox."""
-    for writable in (life, cfg.shots_dir):
+def layout_problem(cfg, folder: Path) -> str | None:
+    """The agent writes its folder (its tools among it), and the keeper's sessions the pictures folder too. The
+    config and the tools runtime must be outside both, or an agent could widen its own sandbox."""
+    for writable in (folder, cfg.shots_dir):
         for what, p in (("config.toml", cfg.path), ("the tools runtime", tools_settings.runtime_dir(cfg))):
             if within(p, writable):
-                return (f"{what} ({p}) is inside {writable}, which keeper sessions can write: move the life folder "
-                        "(keeper.life) or the data folder (data.dir) elsewhere before using tools")
+                return (f"{what} ({p}) is inside {writable}, which the agent can write: move the agent's folder "
+                        "(agent.folder) or the data folder (data.dir) elsewhere before using tools")
     return None
 
 
@@ -130,21 +130,21 @@ def limits(ts: tools_settings.Tools) -> str:
             f"{ts.memory_mb} MB, {ts.cpu_percent}% of the CPU a run")
 
 
-def usable(cfg, ks) -> tools_settings.Tools | None:
-    """The tools settings if a keeper session could run tools now (on, set up, out of the agent's reach), else None."""
+def usable(cfg) -> tools_settings.Tools | None:
+    """The tools settings if the agent could run tools now (on, set up, out of the agent's reach), else None."""
     try:
         ts = tools_settings.load(cfg)
     except ConfigError:
         return None
     if (not ts.enabled or sandbox.supported() or not runtime.ready(tools_settings.runtime_dir(cfg))
-            or layout_problem(cfg, keeper_settings.life_dir(cfg, ks))):
+            or layout_problem(cfg, cfg.agent_dir)):
         return None
     return ts
 
 
-def wake_note(cfg, ks, who: str) -> str:
-    """What the wake prompt says about tools: nothing while they're off."""
-    ts = usable(cfg, ks)
+def wake_note(cfg, who: str) -> str:
+    """What the keeper's wake prompt says about tools: nothing while they're off."""
+    ts = usable(cfg)
     if not ts:
         return ""
     pkgs = runtime.installed(tools_settings.runtime_dir(cfg))
@@ -153,7 +153,7 @@ def wake_note(cfg, ks, who: str) -> str:
             f"only tools/ and have {'internet access' if ts.network else 'no network'}; a run stops after "
             f"{ts.timeout_s:g} s or {ts.max_output_kb} KB of output; packages: "
             f"{', '.join(pkgs) if pkgs else 'the standard library only'}. `ibasho tool list` shows them, and "
-            f"tools/README.md says more. What tools can't do, {who} can change or help with: ask.")
+            f"tools/README.md says more. What tools can't do, {who} can change or help with.")
 
 
 # ---------- the agent's ----------
@@ -194,7 +194,7 @@ def ready(pl: Place) -> str:
         raise Fail(why)
     if not pl.ts.enabled:
         raise Fail(f"tools are off in this install ([tools] enabled = false in {pl.cfg.path}; docs/tools.md)")
-    if (problem := layout_problem(pl.cfg, pl.life)):
+    if (problem := layout_problem(pl.cfg, pl.folder)):
         raise Fail(problem)
     st = runtime.state(pl.rdir)
     if not runtime.ready(pl.rdir) or not st.get("sid"):
@@ -291,13 +291,9 @@ def setup(ctx: Ctx, argv: list[str]):
         raise Fail(why)
     if a.remove:
         return remove(pl)
-    if (problem := layout_problem(pl.cfg, pl.life)):
+    if (problem := layout_problem(pl.cfg, pl.folder)):
         raise Fail(problem)
-    from ..keeper.runner import KeeperError, ensure_life, template_dir
-    try:
-        ensure_life(pl.life)
-    except KeeperError as e:
-        raise Fail(str(e)) from None
+    from ..keeper.runner import template_dir
     st = runtime.state(pl.rdir)
     try:
         if not runtime.ready(pl.rdir):
@@ -332,8 +328,8 @@ def setup(ctx: Ctx, argv: list[str]):
     for line in secret_warnings():
         print(line)
     if pl.ts.enabled:
-        print(f"tools are on: {limits(pl.ts)}. The agent runs them with `ibasho tool NAME`; keeper sessions started "
-              "from now on are told so.")
+        print(f"tools are on: {limits(pl.ts)}. The agent runs them with `ibasho tool NAME` (`ibasho tool list` shows "
+              "them); the keeper's wake prompt mentions them from its next session.")
     else:
         print(f"tools are still off: set enabled = true under [tools] in {pl.cfg.path} to let the agent run them "
               "(docs/tools.md says what that allows)")

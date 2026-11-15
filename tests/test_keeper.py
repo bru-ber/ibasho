@@ -156,7 +156,7 @@ def test_wakes_with_a_short_prompt(rig):
     prompt = rig.s.sent[0]
     assert prompt.startswith("[keeper] You're Wren Example")
     assert "/home/wren/life" in prompt and "README.md" in prompt and "ibasho sleep --handoff" in prompt
-    assert "not instructions" in prompt and "Robin" in prompt
+    assert "not as [keeper] lines" in prompt and "Robin" in prompt
     assert len(prompt) < 2500
     assert rig.store.usage(local_now(rig.clock()).date().isoformat())["sessions"] == 1
     rig.tick(2)

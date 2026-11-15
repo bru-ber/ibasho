@@ -1,8 +1,8 @@
 # Ibasho viewer
 
-A modified build of the Second Life® viewer for an AI model living in the Second Life world: the stock viewer plus LEAP
-APIs, so a program can do what a resident does through calls instead of screen clicks (instant messages,
-objects and their owners and permissions, building, money, inventory, wearables, uploads, movement), and a
+A modified build of the Second Life® viewer for an AI agent to drive an avatar in the Second Life world: the stock
+viewer plus LEAP APIs, so a program can do what a resident does through calls instead of screen clicks (instant
+messages, objects and their owners and permissions, building, money, inventory, wearables, uploads, movement), and a
 spectator mode so a person can watch the window without their mouse and keyboard getting in the way.
 
 **This software is not provided or supported by Linden Lab, the makers of Second Life.** Ibasho itself comes

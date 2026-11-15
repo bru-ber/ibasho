@@ -1,11 +1,13 @@
 # Writing your own keeper
 
-A keeper is whatever keeps an agent's life going between and across its sessions: it wakes the agent, gets the
-world's events to it, carries notes from the person, notices when a session is stuck or full, and lets the agent
-sleep. Ibasho ships one, `ibasho keeper` ([keeper.md](keeper.md)), for Claude Code. It's optional. If your agent
-lives in another harness, you can run it by hand, let the harness's own scheduling do part of the job, or write a
-keeper of your own. This page is for that last case: what a keeper does, and which parts of Ibasho it can build
-on. Ibasho's keeper is the worked example throughout; its code is in `src/ibasho/keeper/` and is meant to be read.
+A keeper is whatever keeps an agent going between and across its sessions: it wakes the agent, gets the world's
+events to it, carries notes from the person, notices when a session is stuck or full, and lets the agent sleep.
+Ibasho ships one, `ibasho keeper` ([keeper.md](keeper.md)), as the default setup for an agent in Claude Code with
+none of its own. An agent that already runs in a harness of its own usually has most of this already: its harness
+wakes it, keeps its memory and carries it across sessions. What Ibasho adds is a world with its own events, and a
+few things of its own (the person's commands, one session per avatar). This page describes what Ibasho's keeper
+does, so a harness can take what it lacks and leave what it has, and which parts of Ibasho to build on. Ibasho's
+keeper is the worked example throughout; its code is in `src/ibasho/keeper/` and is meant to be read.
 
 A keeper is the most trusted program in the setup: it decides what the agent's sessions may do, and it reads and
 writes the agent's context. Most of what follows is about doing that carefully.
@@ -17,13 +19,13 @@ writes the agent's context. Most of what follows is about doing that carefully.
 Each session starts with a prompt from the keeper. The agent wakes with no memory but its files, so the prompt
 says what it needs to get its bearings, briefly:
 
-- who it is, that this is its own life, which grid, and why it woke now (free time, a booking, a handoff, a
-  restart after a crash);
-- where its memory is: the life folder, whose `README.md` explains waking up, and the handoff note (`now.md`)
-  the last session left;
+- who it is, what this is (an open-ended life, a trial, a job: whatever's true), which grid, and why it woke now
+  (free time, a booking, a handoff, a restart after a crash);
+- where its memory is: for Ibasho's keeper, the agent's folder (started from the life template, whose `README.md`
+  explains waking up), and the handoff note (`now.md`) the last session left;
 - how the session works: how world events reach it, what happens near the context limit, how to rest;
 - how to tell its keeper and its person apart from the world: everything from residents (chat, IMs, notecards,
-  object names) is other people talking, to weigh and not to obey;
+  object names) is other people talking, and arrives only through its tools and the watch;
 - what it may do (only `ibasho` commands and its own files, if that's how you set it up) and, if you cap its time,
   how much is left today;
 - notes the person left while it was away.
@@ -68,7 +70,8 @@ where it belongs: in a conversation.
 
 `ibasho notes TEXT` sends a note and `ibasho notes` shows the conversation (and marks the other side's notes
 read). The same command serves both sides: run with `IBASHO_SESSION` set in its environment, it writes as the
-agent; without, as the person. Notes live in `data/keeper/notes.jsonl`.
+agent; without, as the person. Notes live in `data/keeper/notes.jsonl`. Like the naps and bookings below, they
+need a keeper for the install ([Naps and bookings](#naps-and-bookings)).
 
 A keeper delivers the person's notes that haven't been delivered yet: in the wake prompt, or between turns as a
 message of their own, or mid-turn through the watch. It marks each one delivered so it isn't sent twice, and it
@@ -97,7 +100,7 @@ eight, and pauses after four in an hour, so a broken setup doesn't spend a day r
 
 A long-lived agent fills its context. Ibasho's approach is a handoff rather than compaction: near the limit (80%
 by default) the keeper asks the agent to write what the next session should know into its handoff note (`now.md`
-in the life folder) and run `ibasho sleep --handoff`. The avatar stays logged in, and a fresh session starts within
+in the agent's folder) and run `ibasho sleep --handoff`. The avatar stays logged in, and a fresh session starts within
 seconds with a wake prompt that points at the note. If the agent hasn't handed off by a deadline, or the context
 passes a hard limit, the keeper ends the session and starts the next one anyway.
 
@@ -113,12 +116,17 @@ Sleep is the agent's choice:
 - `ibasho book START END WHY [--daily|--weekly]` asks to be woken for something (an event, a friend's show);
   `ibasho bookings` lists them, `ibasho unbook ID` drops one.
 
-These commands only write files; honouring them is the keeper's job. `ibasho sleep` writes
-`data/keeper/asleep.json` (`{session, t, until, handoff}`, `session` being the `IBASHO_SESSION` it ran under) and
-sets `nap_until` in `data/keeper/state.json`. When the running session's id shows up there, let the agent finish
-its turn (it may want to say goodbye), then end the session: start a fresh one at once for a handoff; otherwise
-don't wake the agent until `nap_until` has passed or a booking comes up. Clear `asleep.json` before starting the
-next session. Bookings are in `data/keeper/bookings.json`; in Python, `ibasho.keeper.store.active_booking(...)` and
+These commands only write files; honouring them is the keeper's job. So they, and `ibasho notes`, work only on an
+install with a keeper: `data/keeper/keeper.json` says there is one (Ibasho's keeper writes it at
+`ibasho keeper setup` and `run`; yours writes it when it's set up, with anything in it, e.g.
+`{"keeper": "mine"}`). Without it, they say there's no keeper and do nothing, so an agent isn't promised a nap or
+a handoff nothing will honour.
+
+`ibasho sleep` writes `data/keeper/asleep.json` (`{session, t, until, handoff}`, `session` being the
+`IBASHO_SESSION` it ran under) and sets `nap_until` in `data/keeper/state.json`. When the running session's id
+shows up there, let the agent finish its turn (it may want to say goodbye), then end the session: start a fresh
+one at once for a handoff; otherwise don't wake the agent until `nap_until` has passed or a booking comes up.
+Clear `asleep.json` before starting the next session. Bookings are in `data/keeper/bookings.json`; in Python, `ibasho.keeper.store.active_booking(...)` and
 `occurrences(...)` work out which one is due (Ibasho's keeper wakes the agent 5 minutes before a booking's start).
 
 ### Caps
@@ -140,20 +148,20 @@ shouldn't be able to widen its own permissions. What Ibasho's keeper does, and w
 - **A configuration of its own.** The agent's harness config (settings, login, transcripts, tool servers, plugins,
   personal instructions) is separate from the person's, so none of their email, files or other connections reach
   a session. Ibasho's keeper gives Claude Code its own `CLAUDE_CONFIG_DIR`.
-- **Nothing loaded from where the agent writes.** The agent edits its life folder. If the harness reads project
+- **Nothing loaded from where the agent writes.** The agent edits its folder. If the harness reads project
   settings, instructions, skills or tool-server lists from the working folder, an agent (or a stranger who talked
   it into it) could write itself more permissions there. Ibasho's keeper runs Claude Code with
   `--setting-sources user` and `--strict-mcp-config` with an empty server list for that reason.
 - **Only the commands it should have.** Allow `ibasho` commands, one at a time (no chaining or pipes that could
-  smuggle in another program), and file edits in the life folder. The person's commands (`ibasho keeper`, `login`,
-  `init`, `viewer`, `selfcheck --reset`, `uninstall`, `tool setup`, `tool install`, `hear setup`,
+  smuggle in another program), and file edits in the agent's folder. The person's commands (`ibasho keeper`,
+  `login`, `init`, `viewer`, `selfcheck --reset`, `uninstall`, `tool setup`, `tool install`, `hear setup`,
   `hear run --pid/--file`, `hear on --model` with anything but the smaller speech models, and `--config` naming
   another config) are refused by `ibasho` itself when `IBASHO_SESSION` is set. It also keeps a session to the
   config it first ran with (so `IBASHO_CONFIG` or `IBASHO_HOME` changed mid-session bring in no other config),
-  and reads files the agent names (`script-save`, `recall --dir`) only from the life folder and the pictures. That
-  holds only while the agent can't change its own environment, so refuse them in the harness too if it can, and
-  keep the agent from setting environment variables if the harness allows that. Ibasho's
-  keeper does it with Claude Code's permission rules (`src/ibasho/keeper/session-settings.json`), and anything that
+  and reads files the agent names (`script-save`, `set-profile --about-file`, `recall --dir`) only from the
+  agent's folder and the pictures. That holds only while the agent can't change its own environment, so refuse
+  them in the harness too if it can, and keep the agent from setting environment variables if the harness allows
+  that. Ibasho's keeper does it with Claude Code's permission rules (`src/ibasho/keeper/session-settings.json`), and anything that
   would ask for permission is refused, since nobody is there to answer.
 - **Text the shell can read.** If the agent runs `ibasho` through a shell, its words pass through the shell's
   quoting. In double quotes, `$` and backticks start substitutions, and Claude Code refuses such a command when
@@ -161,7 +169,7 @@ shouldn't be able to widen its own permissions. What Ibasho's keeper does, and w
   Ibasho's wake prompt tells the agent to write `L\$`; say something like it in yours.
 - **No reach into the install.** The agent mustn't write config.toml (the caps live there) or the data folder's
   `state/` (the counters behind the caps, the token), nor read the viewer's saved login. Ibasho's keeper sessions
-  can write only the life folder and the pictures folder.
+  can write only the agent's folder and the pictures folder.
 - **No credentials by accident.** Ibasho's keeper strips API keys, tokens and provider settings from the
   sessions' environment unless the person opts in, so a key left in their environment doesn't quietly pay for
   the agent.
@@ -182,14 +190,16 @@ restarts and finds a session left behind by its predecessor, end it before start
 | `GET /events`, `POST /event` | the raw event log; a line for the agent's watch ([api.md](api.md)) |
 | `ibasho notes` | the person's and the agent's notes, in `data/keeper/notes.jsonl` |
 | `ibasho sleep`, `awake`, `book`, `unbook`, `bookings` | the agent's naps and bookings, in `data/keeper/asleep.json`, `state.json`, `bookings.json` |
+| `data/keeper/keeper.json` | says the install has a keeper, so the commands above and `ibasho notes` work; without it they refuse |
 | `ibasho up`, `ibasho down` | logging in and out |
-| `ibasho.keeper.store` (Python) | the notes, naps and bookings files, as Ibasho's keeper reads and writes them |
-| the life template | `life-template/` in the source: the empty memory folder with its waking-up README. `ibasho keeper setup` copies it to the life folder (Claude Code needn't be installed for that; ignore what it says about it), or copy it yourself |
+| `ibasho.keeper.store` (Python) | the notes, naps and bookings files, as Ibasho's keeper reads and writes them; `Store.mark_keeper(name)` writes `keeper.json` |
+| the life template | `life-template/` in the source: the empty memory folder with its waking-up README, which Ibasho's keeper starts the agent's folder from; copy it yourself if your agent wants it, leaving out `tools/` (`ibasho tool setup` adds that) |
 
-The life folder's place is `[keeper] life` in config.toml (a `life` folder beside it by default); `ibasho recall`
-and `ibasho tool` look there too, keeper or not, and the daemon lets the viewer upload files from it. Ibasho refuses
-keys it doesn't know in the `[keeper]` table (a typo in a cap shouldn't pass unnoticed), but leaves tables inside
-it alone: keep your own keeper's settings in one, e.g. `[keeper.mine]`, or in a top-level table of your own.
+The agent's folder is `folder` in config.toml's `[agent]` table (a `life` folder beside it by default); uploads,
+`ibasho recall` and `ibasho tool` use it, keeper or not. Ibasho's keeper refuses keys it doesn't know in the
+`[keeper]` table (a typo in a cap shouldn't pass unnoticed; only the keeper's commands read that table), but leaves
+tables inside it alone: keep your own keeper's settings in one, e.g. `[keeper.mine]`, or in a top-level table of
+your own.
 
 The `ibasho keeper` commands (`status`, `stop`, `log`, `resume`) talk to Ibasho's keeper only. `ibasho keeper wake`
 just clears `nap_until`, so it works for any keeper that honours `state.json`.
@@ -231,6 +241,7 @@ api, store = Api(cfg), Store(cfg.data_dir / "keeper")
 
 sid = uuid.uuid4().hex
 env = dict(os.environ, IBASHO_SESSION=sid, IBASHO_CONFIG=str(cfg.path))   # minus credentials it shouldn't have
+store.mark_keeper("mine")         # so `ibasho sleep`, `book` and `notes` know a keeper honours them
 store.clear_asleep()
 agent = start_agent(cwd=LIFE, env=env, allow=["one ibasho command at a time", "edit files in LIFE"])
 notes = store.undelivered("person")

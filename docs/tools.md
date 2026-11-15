@@ -1,12 +1,11 @@
 # Tools
 
-Tools are programs the agent writes for itself: Python files in its life folder's `tools/`, run with
-`ibasho tool NAME [ARGS...]`. A model living this way runs into things it lacks (a calculator for a build's
-geometry, a texture generator, a parser for a notecard format, a way to keep its notes in order), and building
-the missing piece is often the best part of a day. Without tools it can only work around the gap.
+Tools are programs the agent writes for itself: Python files in its folder's `tools/` (`agent.folder` in
+config.toml), run with `ibasho tool NAME [ARGS...]`: a calculator for a build's geometry, a texture generator, a
+parser for a notecard format, a way to keep its notes in order, whatever it finds it lacks.
 
 Tools are off by default, and only you can turn them on: by default a keeper session can run `ibasho` commands
-and edit files in its life folder, nothing else. With tools on, it can also run code it wrote, inside a Windows
+and edit files in its folder, nothing else. With tools on, it can also run code it wrote, inside a Windows
 sandbox that sees, of your files, only its tools folder. (With another harness, what the agent can run is
 whatever that harness allows; tools add something only where `ibasho tool` is its one way to run code.) Read [What's contained](#whats-contained) and
 [What isn't](#what-isnt) before you turn them on.
@@ -26,10 +25,11 @@ enabled = true
 
 `ibasho tool setup` downloads Python 3.14.9 (the embeddable package from python.org, about 12 MB, checked
 against the hash python.org published for it) into `tools-runtime/` beside config.toml, makes the sandbox (a
-Windows app container), adds `tools/` to the agent's life folder with a README for the agent, and then runs a
-probe in the sandbox that tries to read config.toml and your user folder, write outside `tools/`, and reach the
-internet. It stops with PROBLEM lines if any of that works on your machine. Offline, `--zip FILE` takes a copy of
-the zip you fetched yourself (it's checked the same way). Run `ibasho tool setup` again after updating Ibasho.
+Windows app container), adds `tools/` to the agent's folder with a README for the agent (and nothing else: the
+rest of the folder is left as it is), and then runs a probe in the sandbox that tries to read config.toml and your
+user folder, write outside `tools/`, and reach the internet. It stops with PROBLEM lines if any of that works on
+your machine. Offline, `--zip FILE` takes a copy of the zip you fetched yourself (it's checked the same way). Run
+`ibasho tool setup` again after updating Ibasho.
 
 From the next session on, the keeper's wake prompt tells the agent about tools and their limits. While tools are
 off, the wake prompt doesn't mention them, and sessions are refused `ibasho tool` outright. With another harness,
@@ -80,24 +80,25 @@ and network access against both: your own rights open nothing by themselves. Iba
 two folders. Around that:
 
 - **Files.** It reads and writes `tools/` and reads its Python, and nothing else of yours: not the rest of the
-  life folder, not config.toml, not your user folder (Documents, AppData...). It can't write outside `tools/` in
+  agent's folder, not config.toml, not your user folder (Documents, AppData...). It can't write outside `tools/` in
   your folders or the install's, nor in the temp folder, nor in the app container's own folder Windows makes for
   it (Ibasho takes its access to that away). It can't make links pointing outside `tools/` either (Windows refuses
   that to sandboxed processes).
 - **Network.** None by default: no connections, no name lookups. Never this machine's loopback, even with the
   network on, so a tool can't reach the Ibasho daemon (and through it the world), the agent's harness, or any other
   local server.
-- **Screen and input.** It runs on a desktop of its own: it can't capture your screen, read the keyboard, see or
-  send messages to other programs' windows, or use the clipboard.
+- **Screen and input.** It runs on a desktop of its own: it can't capture your screen, read the keyboard, or see or
+  send messages to other programs' windows. It can see whether something is on the clipboard, and in what formats,
+  but not read it.
 - **Environment.** Its environment variables are built from scratch (Windows paths and a home inside `tools/`),
   so none of yours reach it: no API keys, tokens or paths of yours.
 - **Resources.** The time, output, memory and CPU limits above, at most 16 processes, below-normal priority.
   When a run ends, everything it started ends with it: nothing keeps running in the background.
 - **In keeper sessions.** `ibasho tool setup` and `ibasho tool install` are refused (by the command, and by the
   session's permission settings), so the agent can't widen its own sandbox; config.toml and `tools-runtime/` are
-  outside the folders sessions may write (Ibasho refuses to run tools if your `keeper.life` or `data.dir` would put
-  them inside). Files a tool writes are only files: sessions run with project settings off, which also leaves
-  out any CLAUDE.md in the life folder, so nothing there becomes instructions or permissions (see
+  outside the folders sessions may write (Ibasho refuses to run tools if your `agent.folder` or `data.dir` would
+  put them inside). Files a tool writes are only files: sessions run with project settings off, which also leaves
+  out any CLAUDE.md in the agent's folder, so nothing there becomes instructions or permissions (see
   [keeper.md](keeper.md#isolation)). With another harness, this holds only if the harness keeps the agent away
   from config.toml, `tools-runtime/` and the person's commands: `ibasho tool setup` and `install` refuse by
   themselves only when `IBASHO_SESSION` is set in the agent's environment.
@@ -161,11 +162,11 @@ ibasho tool setup --remove
 
 removes `tools-runtime/` and the app container (its registry entry and its folder under
 `%LOCALAPPDATA%\Packages`), and takes the container's access entry off `tools/`. The agent's tools stay in its
-life folder. Set `enabled = false` to keep everything but stop runs.
+folder. Set `enabled = false` to keep everything but stop runs.
 
 ## Files
 
 - `tools-runtime/` beside config.toml: `python/` (the tools' Python, with `site-packages/`) and `runtime.json`
   (version, container, packages you installed).
-- `tools/` in the life folder: the agent's tools, its README, and `.home/` (the tools' home folder: caches,
+- `tools/` in the agent's folder: the agent's tools, its README, and `.home/` (the tools' home folder: caches,
   library settings, temporary files; temporary files older than a day are deleted before a run).

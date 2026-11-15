@@ -9,9 +9,9 @@ Ibasho is early software, and this API can change between versions. `GET /status
 
 ## What the API covers, and what stays with the `ibasho` command
 
-The API is for living: seeing, moving, talking, building, paying, and reading what happens. It doesn't start
-anything. Starting and stopping stay with the `ibasho` command, which the person runs or the agent runs from a
-shell:
+The API covers what the avatar does and perceives: seeing, moving, talking, building, paying, and reading what
+happens. It doesn't start anything. Starting and stopping stay with the `ibasho` command, which the person runs or
+the agent runs from a shell:
 
 - `ibasho up` starts the daemon (if it isn't running), starts the viewer, logs in from the saved login and waits
   until the avatar is in world. `ibasho down` logs out, closes the viewer and stops the daemon.
@@ -303,7 +303,7 @@ only the person changes ([safety.md](safety.md) says why each is there).
 ### What passes
 
 The list (`policy.ALLOWED`) holds what Ibasho's own commands, MCP tools, hearing and keeper send, the Ibasho
-viewer's APIs for living in the world, and Linden Lab's stock ops for the avatar, inventory, outfits and gestures.
+viewer's APIs for acting in the world, and Linden Lab's stock ops for the avatar, inventory, outfits and gestures.
 Some ops have their arguments checked too:
 
 | pump | ops |
@@ -375,7 +375,8 @@ opens only the windows a wildcard would, and a dangerous window opens only throu
 
 Each entry is a way around the defaults that a stranger could talk the agent into using. `LLWindow` can't be
 narrowed at all: keys go to whatever has focus, and that can be any window the viewer has open. What keeps the
-list the person's is that the agent can't edit the config ([safety.md](safety.md#allowing-more)).
+list the person's is that the agent can't edit the config, where its harness keeps it so
+([safety.md](safety.md#allowing-more)).
 
 ### The hard rules
 
@@ -416,7 +417,7 @@ list the person's is that the agent can't edit the config ([safety.md](safety.md
 - **The daemon's own wiring.** `LLNotifications ignore`/`forward` and removing the daemon's listeners are refused.
 - **Files on this machine.** The viewer writes pictures (`LLViewerWindow saveSnapshot`'s `filename`) only into
   the data folder's `shots\`, and reads files to upload (`IbashoAgent upload`'s `path`, `uploadMesh`'s `path`,
-  `lod_med`, `lod_low`, `lod_lowest` and `physics`) only from the life folder (`[keeper] life`) and `shots\`;
+  `lod_med`, `lod_low`, `lod_lowest` and `physics`) only from the agent's folder (`agent.folder`) and `shots\`;
   paths must be absolute. A model's own references count too: a glTF's buffers and images, and a COLLADA file's
   images (with or without `textures`, since the upload window loads them for its preview), must be named relative
   to the model, in its folder or below: no absolute paths, no `..`, and no `:`, `%` or `&` left after decoding
@@ -443,7 +444,7 @@ when a request with `"wait": false` goes out, or when a request times out (it ma
 These rules guard against mistakes and manipulation; they aren't a sandbox. `/event` isn't checked at all, and
 whatever the person adds to the list widens what a persuaded agent can reach. What keeps an agent inside the rules
 is that it can reach the world only through this API, and can't edit config.toml or the data folder:
-[safety.md](safety.md#untrusted-text-is-conversation-not-instructions) says what that takes with different
+[safety.md](safety.md#untrusted-text) says what that takes with different
 harnesses.
 
 ## The `ibasho` commands as requests

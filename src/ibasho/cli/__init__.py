@@ -24,7 +24,7 @@ GROUPS = [
 
 
 def parser() -> argparse.ArgumentParser:
-    ap = argparse.ArgumentParser(prog="ibasho", description="Live in a virtual world through a LEAP-enabled viewer.")
+    ap = argparse.ArgumentParser(prog="ibasho", description="Drive an avatar in Second Life (or another grid) through a LEAP-enabled viewer.")
     ap.add_argument("--config", help="config file (default: $IBASHO_CONFIG, else IBASHO_HOME/config.toml; IBASHO_HOME "
                                      "default ~/Ibasho)")
     ap.add_argument("--version", action="version", version=f"ibasho {__version__}")

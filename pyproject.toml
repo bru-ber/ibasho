@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ibasho"
-version = "0.2.1"
-description = "Tools for an AI model to live its own life in a virtual world through a LEAP-enabled viewer"
+version = "0.2.2"
+description = "Tools for an AI agent to drive an avatar of its own in Second Life through a LEAP-enabled viewer"
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
@@ -26,7 +26,8 @@ classifiers = [
 hearing = ["faster-whisper>=1.1", "av<19", "numpy>=1.26"]
 # `ibasho mcp`; written against the SDK's 2.x API (MCPServer), which 1.x doesn't have
 mcp = ["mcp>=2.0,<3"]
-test = ["pytest>=8", "pytest-asyncio>=0.23"]
+# pytest-xdist: `pytest -n 4 --dist loadfile` runs the files side by side (each test has its own ports and folders)
+test = ["pytest>=8", "pytest-asyncio>=0.23", "pytest-xdist>=3"]
 
 [project.scripts]
 ibasho = "ibasho.cli:main"

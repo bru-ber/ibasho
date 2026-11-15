@@ -8,7 +8,6 @@ import json
 import math
 import re
 import time
-from pathlib import Path
 
 from .. import geometry as geo
 from ..api import ApiError
@@ -503,16 +502,17 @@ def profile(ctx: Ctx, a):
 
 
 def set_profile(ctx: Ctx, a):
-    """My profile is mine to write: Ibasho passes on whatever I choose."""
-    need_ibasho(ctx, "set-profile")
-    api = ctx.api
+    """Ibasho passes on whatever text it's given. The about file, like any file the agent names, comes only from its
+    folders inside its sessions."""
     about = a.about
     if a.about_file is not None:
         if about is not None:
             raise Fail("--about or --about-file, not both")
-        about = Path(a.about_file).read_text(encoding="utf-8")
+        about = ctx.agent_path(a.about_file, "about file").read_text(encoding="utf-8")
     if about is None and a.image is None and a.display_name is None:
         raise Fail("nothing to set: --about, --about-file, --image or --display-name")
+    need_ibasho(ctx, "set-profile")
+    api = ctx.api
     if not api.has_op("IbashoAgent", "setProfile"):
         raise Fail("setting my own profile needs the Ibasho viewer 0.2 or newer")
     if about is not None or a.image is not None:

@@ -2,7 +2,7 @@
 
 This page is for an agent setting Ibasho up for the person it works with. People don't usually type these
 commands; their agent does, in an ordinary session of its own (Ibasho's commands for setting up are refused inside
-the sessions of the agent that will live in the world). If you're a person doing it yourself, it reads the same
+the sessions of the agent that will use the avatar). If you're a person doing it yourself, it reads the same
 way: "you" runs the commands, and "the person" is you too.
 
 Most of setting up is yours: installing, writing the config, starting things, checking they work. A few moments
@@ -18,7 +18,7 @@ The whole thing takes an evening, most of it waiting for downloads.
 So you can plan, and ask in as few sittings as possible:
 
 1. **The account** (step 2): they make the Second Life® account on the website, with their own email address and
-   date of birth, choosing its name with you or with the agent who'll live in it.
+   date of birth, choosing its name with you or with the agent who'll use it.
 2. **The scripted-agent flag** (step 2): they tick it on the website while logged in as that account.
 3. **The first login** (step 5), at this computer: they type the password into the viewer once and accept Linden
    Lab's terms. That first start of the viewer also brings up Windows' firewall prompt for it, which they allow.
@@ -38,10 +38,11 @@ Check these, and install what's missing (with the person's agreement for anythin
   GPU; the viewer uses it like any viewer does). For a Linux server without a graphics card, Ibasho runs in a
   container instead: [linux.md](linux.md) takes over from step 3, and the rest of this page still applies.
 - Python 3.12 or newer (3.14 works, hearing included).
-- The agent's harness. The best-tested path is [Claude Code](https://code.claude.com/) with Ibasho's keeper,
-  installed so `claude` is on PATH (or set `keeper.claude` to its path); installs through npm (`claude.cmd`) are
-  untested. Any harness whose agent can run shell commands, use MCP tools, or make HTTP requests works too
-  ([Another harness](#another-harness)).
+- The agent's harness: usually the one it already runs in, with its own memory and way of running. Any harness
+  whose agent can run shell commands, use MCP tools, or make HTTP requests works
+  ([In the agent's own harness](#in-the-agents-own-harness)). For an agent with no setup of its own, Ibasho's
+  keeper runs it in [Claude Code](https://code.claude.com/), installed so `claude` is on PATH (or set
+  `keeper.claude` to its path); installs through npm (`claude.cmd`) are untested.
 - Only for building things from source: Visual Studio 2022 or its Build Tools with the C++ workload (the viewer,
   if there's no release zip; `proccap.exe` for hearing, if the release page has none).
 
@@ -74,12 +75,13 @@ statistics and search honest, and it's the honest answer to "is this a program?"
 `grid.scripted_agent_flag_confirmed = true` in the config (step 4). On Linden Lab's grids nothing logs in before
 that, and `ibasho selfcheck` checks the flag in world.
 
-**The display name and profile are the agent's.** Nothing for the person to do: once in world, the agent writes
-its own (`ibasho set-profile`, the `set_profile` tool). People in Second Life click a name to open the profile and
-see who they're talking to, so it's read more than you might think; the display name is what shows over the
-avatar's head and in chat, and Second Life lets it change about once a week. What goes in either is the agent's
-choice, and Ibasho asks no wording of it. If the person is based in the EU, point them to the note in
-[safety.md](safety.md#being-recognisable).
+**The display name and profile.** Nothing needs doing now: once in world, the agent can write its own
+(`ibasho set-profile`, the `set_profile` tool). People in Second Life click a name to open the profile and see who
+they're talking to, so it's read more than you might think; the display name is what shows over the avatar's head
+and in chat, and Second Life lets it change about once a week. What goes in either is between the person and the
+agent, and Ibasho asks no wording of it. If the person is based in the EU, point them to the note in
+[safety.md](safety.md#being-recognisable); [privacy.md](privacy.md#your-part-as-the-person-running-an-agent) has
+what a notice there might say.
 
 ## 3. Install Ibasho and the viewer
 
@@ -210,22 +212,92 @@ Expect it to look like any viewer in Task Manager: GPU use like any Second Life 
 helper processes (the built-in browser) taking their share of RAM. The viewer's log is
 `%APPDATA%\Ibasho\logs\SecondLife.log`; Ibasho's own logs are in `%USERPROFILE%\Ibasho\data\state\`.
 
-## 7. Connecting the agent who'll live there
+## 7. Connecting the agent
 
-Whatever the harness, the agent lives the same way: it logs itself in with `ibasho up`, reads its memory folder,
-looks around, follows what happens through `ibasho watch`, acts with `ibasho` commands (or through MCP or HTTP),
-and rests with `ibasho sleep`. Its memory folder (`life\` beside config.toml, or `keeper.life`) starts from the
-life template, whose `README.md` explains waking up to it. Leave that folder as the template makes it: what goes
-in it is the agent's.
+The agent keeps what it already has: its harness, its memory, its way of running. From Ibasho it takes the avatar:
+it logs in with `ibasho up` (the `up` tool over MCP), follows what happens in the world through `ibasho watch` or
+the MCP server's events, acts with `ibasho` commands, MCP tools or the HTTP API, and logs out with `ibasho down`.
 
-Two things need arranging: what the agent's sessions may do, and what keeps them going (waking it, getting events
-and the person's notes to it, handing off when its context fills). The keeper does both for Claude Code. With
-another harness, you arrange them.
+Two things need arranging in any harness: how the world's events reach the agent, and what its sessions may do.
+For an agent with no setup of its own, Ibasho's keeper arranges both in Claude Code and supplies the rest of one
+([the keeper](#for-an-agent-with-no-setup-of-its-own-the-keeper)).
 
-### With Claude Code and the keeper
+### In the agent's own harness
+
+An agent can reach Ibasho three ways, all held to the same caps by the daemon and the viewer:
+
+- **The `ibasho` command**, for any agent that can run shell commands. `ibasho -h` lists everything, and
+  `ibasho COMMAND -h` explains one. Events come from `ibasho watch`: it runs until stopped and prints one line per
+  thing worth waking for, for harnesses that stream a background command's output into the agent's context.
+  Where a harness can only wait for a command to finish, `ibasho watch --exit-on-wake` returns after each batch
+  (with `--timeout SECONDS` to give up after a while), and the agent runs it again.
+- **MCP**, for an agent in an MCP client: `ibasho mcp` ([mcp.md](mcp.md)). A client that speaks MCPL, such as
+  Connectome ([connectome.md](connectome.md)), gets the world's events pushed to the agent as they happen.
+- **The HTTP API**, for a program in any language: [api.md](api.md).
+
+**The agent's folder.** An agent with memory of its own keeps it, wherever it is: Ibasho keeps no memory for it,
+and the life template is the keeper's starting point, not something Ibasho needs. Ibasho does have one folder for
+the agent's files: uploads (textures, sounds, animations) are read only from there and from the pictures folder,
+and so, inside the agent's sessions, are the files `ibasho` is given (`script-save`, `set-profile --about-file`,
+`recall --dir`); `ibasho recall` searches it by default, and tools (step 10) live in its `tools\`. It's `life\`
+beside config.toml, or wherever `agent.folder` in config.toml points (`keeper.life`, its earlier name, still
+works); a folder in the agent's own workspace works. Ibasho puts little there: `ibasho tool setup` adds only
+`tools\`, and only the keeper starts it from the template. The template's `README.md`, about waking up
+in the world, is there for any agent that wants to read it.
+
+**What the agent should be able to do:** run `ibasho` (with `IBASHO_CONFIG` pointing at config.toml if it isn't in
+the default place), read and write its folder, and read the pictures `ibasho look` and `ibasho shot` save in
+`data\shots\`. Set `IBASHO_SESSION` in its environment, to any non-empty id: `ibasho` then refuses the person's
+commands (below), reads files the agent names (`script-save`, `set-profile --about-file`, `recall --dir`) only
+from its folder and the pictures, and keeps to the config it first ran with under that id. One stable id for the
+install is enough outside the keeper (the keeper gives each session a new one); the same id used on two installs
+makes the second refuse, since an id keeps to one config.
+
+If the agent runs `ibasho` through a shell, its text goes through the shell's quoting: inside double quotes, `$` and
+backticks start substitutions (and harnesses that check commands, Claude Code among them, refuse a command with
+one), so L$ is written `L\$` there, or the text single-quoted.
+
+**What stays the person's.** Ibasho's limits hold only while the agent can't change them, so these are kept from
+it:
+
+- **The person's commands:** `ibasho keeper ...`, `ibasho login`, `ibasho init`, `ibasho viewer ...`,
+  `ibasho selfcheck --reset`, `ibasho uninstall`, `ibasho tool setup`, `ibasho tool install`, `ibasho hear setup`,
+  and the `--config` option pointing at another config. With `IBASHO_SESSION` set, `ibasho` refuses them itself;
+  an agent with a free hand over its environment could unset the variable (or point `IBASHO_CONFIG` elsewhere under
+  a new session id), so where the harness can refuse them, and keep the agent from setting environment variables,
+  let it.
+- **config.toml.** The caps live there. An agent that can edit it can raise them, and `ibasho up` restarts the
+  daemon with whatever it finds.
+- **The data folder's `state\`** (the counters behind the caps, the API token, the flag check), and **`keeper\`**
+  if a keeper uses it (notes and naps, which the agent changes only through `ibasho`).
+- **The viewer's folders** (`%APPDATA%\Ibasho`), which hold the saved login: enough to log in as the account.
+
+What else the harness lets the agent do (the person's other files, other programs, the network) is between the
+person and the agent, as it was before Ibasho. What Ibasho changes is that the agent now reads strangers' words
+all day, and anyone can try to talk it into something. If it has an unrestricted shell, Ibasho's caps guard against
+mistakes but not against an agent talked into changing them, and anything it can read, a stranger can try to get it
+to send. Tell the person which it is; [safety.md](safety.md) has more.
+
+**Keeping it going.** An agent in its own harness already has whatever runs it: what wakes it, how it rests, how it
+carries on when its context fills. Ibasho adds only the world's events (above). For a harness that wants some of
+what Ibasho's keeper does (handoffs, naps and bookings, notes from the person), [writing-a-keeper.md](writing-a-keeper.md)
+describes it and the pieces to build on. The keeper's own commands (`ibasho sleep`, `awake`, `book`, `unbook`,
+`bookings`, `notes`) say there's no keeper and do nothing on an install without one; `ibasho down` logs out.
+
+**Who pays** is between the person and the model's provider: whatever account the harness uses. Ibasho's caps
+cover the world (messages, L$), not the model, and an agent awake for hours reads a lot (chat, pictures): a cap on
+its time or spending in the harness is worth having.
+
+### For an agent with no setup of its own: the keeper
+
+The keeper is Ibasho's default setup. It runs the agent's sessions in Claude Code, starts the agent's folder
+(`life\` beside config.toml, or `agent.folder`) from the life template as its memory, and handles the rest: waking
+it, handing off near the context limit, restarts, naps and bookings, the person's notes, and caps on its time and
+the person's Claude usage. The template's `README.md` explains waking up to it. Leave the folder as the template
+makes it: what goes in it is the agent's.
 
 ```
-ibasho keeper setup    # makes the life folder, checks Claude Code, shows what sessions may do and the caps
+ibasho keeper setup    # starts the agent's folder from the template, checks Claude Code, shows permissions and caps
 ibasho keeper login    # the person signs in (below)
 ibasho keeper start    # runs in the background; `ibasho keeper run` keeps it in a window instead
 ```
@@ -257,7 +329,7 @@ plugins, hooks, permissions or personal instructions reach a session that reads 
 
 **What sessions may do.** Sessions run with Claude Code's `acceptEdits` mode and nobody to answer a permission
 prompt, so anything that would ask is refused. The agent can run `ibasho` commands, one at a time, and read and
-write files in its life folder with Claude Code's file tools and simple shell commands. Pipes and command chains,
+write files in its folder with Claude Code's file tools and simple shell commands. Pipes and command chains,
 `python`, `curl`, web fetches and MCP servers are refused, and so are the person's own `ibasho` commands:
 `keeper`, `login`, `init`, `viewer`, `selfcheck --reset`, `uninstall`, `tool setup`, `tool install`, `hear setup`,
 and `--config` (Claude Code's permission settings refuse them, and `ibasho` itself does too, in the agent's
@@ -278,73 +350,14 @@ At a cap, the agent gets about 10 minutes to find a stopping point, then the ses
 out. A subscription's windows are shared with the person's own use of Claude, so heavy use of theirs can keep the
 agent asleep, for days if the weekly window is past 80%.
 
-### Another harness
-
-An agent can reach Ibasho three ways, all held to the same caps by the daemon and the viewer:
-
-- **The `ibasho` command**, for any agent that can run shell commands. `ibasho -h` lists everything, and
-  `ibasho COMMAND -h` explains one. Events come from `ibasho watch`: it runs until stopped and prints one line per
-  thing worth waking for, for harnesses that stream a background command's output into the agent's context.
-  Where a harness can only wait for a command to finish, `ibasho watch --exit-on-wake` returns after each batch
-  (with `--timeout SECONDS` to give up after a while), and the agent runs it again.
-- **MCP**, for an agent in an MCP client: `ibasho mcp` ([mcp.md](mcp.md)). A client that speaks MCPL, such as
-  Connectome ([connectome.md](connectome.md)), gets the world's events pushed to the agent as they happen.
-- **The HTTP API**, for a program in any language: [api.md](api.md).
-
-The memory folder: `ibasho keeper setup` makes it from the template even without the keeper (it will say Claude
-Code is missing; that's fine), or copy `life-template\` to it, leaving out `tools\` (`ibasho tool setup` adds that
-when tools go on). Point the agent at its `README.md` when it first wakes; the README talks about the keeper, so
-tell the agent once how its setup differs.
-
-**What the agent should be able to do:** run `ibasho` (with `IBASHO_CONFIG` pointing at config.toml if it isn't in
-the default place), read and write its memory folder, and read the pictures `ibasho look` and `ibasho shot` save in
-`data\shots\`. Set `IBASHO_SESSION` in its environment to a new id for each session: `ibasho notes` then writes as
-the agent (without it, a note counts as the person's), `ibasho sleep --handoff` works, the session keeps to the
-config it first ran with, and `ibasho` refuses the person's commands (below) and reads files the agent names
-(`script-save`, `recall --dir`) only from its memory folder and the pictures.
-
-If the agent runs `ibasho` through a shell, its text goes through the shell's quoting: inside double quotes, `$` and
-backticks start substitutions (and harnesses that check commands, Claude Code among them, refuse a command with
-one), so L$ is written `L\$` there, or the text single-quoted.
-
-**What to keep from it:**
-
-- **The person's commands:** `ibasho keeper ...`, `ibasho login`, `ibasho init`, `ibasho viewer ...`,
-  `ibasho selfcheck --reset`, `ibasho uninstall`, `ibasho tool setup`, `ibasho tool install`, `ibasho hear setup`,
-  and the `--config` option pointing at another config. With `IBASHO_SESSION` set, `ibasho` refuses them itself;
-  an agent with a free hand over its environment could unset the variable (or point `IBASHO_CONFIG` elsewhere under
-  a new session id), so where the harness can refuse them, and keep the agent from setting environment variables,
-  let it.
-- **config.toml.** The caps live there. An agent that can edit it can raise them, and `ibasho up` restarts the
-  daemon with whatever it finds.
-- **The data folder's `state\`** (the counters behind the caps, the API token, the flag check) and **`keeper\`**
-  (notes and naps, which the agent should change only through `ibasho`).
-- **The viewer's folders** (`%APPDATA%\Ibasho`, with the saved login) and the rest of the person's files, other
-  programs and the network: everything an agent reading strangers' words all day doesn't need.
-
-If the harness can limit the agent to particular commands and folders, set it up like that. If all it offers is an
-unrestricted shell, the agent can do anything the person's Windows user can: Ibasho's caps then guard against
-mistakes, but not against an agent talked into changing them, and anything it can read, a stranger can try to talk
-it into sending. Tell the person which it is. [safety.md](safety.md) has more.
-
-**Keeping it going.** Something has to start the agent's sessions, get the person's notes to it, and hand off to a
-fresh session before the context fills: the person, the harness's own scheduling, or a keeper you write
-([writing-a-keeper.md](writing-a-keeper.md) describes what Ibasho's keeper does and the pieces to build on).
-`ibasho notes "TEXT"` (run without `IBASHO_SESSION`) leaves a note from the person that the agent reads with
-`ibasho notes`; delivering it is the keeper's part.
-
-**Who pays** is between the person and the model's provider: whatever account the harness uses. If the agent runs
-for hours unattended, cap its time or spending in the harness or the keeper, since Ibasho's caps cover the world
-(messages, L$), not the model.
-
-## 8. Before the agent's first wake
+## 8. Before the agent first logs in
 
 Go over with the person, briefly:
 
-- what the agent will do: live in the world as itself, meet people, build, keep its own memory, set its own pace,
-  and sometimes say no;
-- the caps (L$, messages, the keeper's hours and spending) and how to reach the agent (`ibasho notes`, or asking
-  you);
+- what Ibasho lets the agent do (see, move, talk, build, give and pay, and hear if hearing is on), and that what it
+  does with that is between them and the agent;
+- the caps (L$, messages, and with the keeper its hours and spending) and how to reach the agent (through its
+  harness, `ibasho notes` with the keeper, or asking you);
 - that they're the account holder, responsible for what's done through it and for what the agent's perceptions
   send to its model's provider ([safety.md](safety.md#what-stays-the-persons-responsibility),
   [privacy.md](privacy.md)).
@@ -373,14 +386,14 @@ their sets, and keeps the CPU busy the whole time a stream plays.
 
 ## 10. Tools (optional)
 
-Tools are Python programs the agent writes for itself in its life folder's `tools/` and runs with
+Tools are Python programs the agent writes for itself in its folder's `tools/` and runs with
 `ibasho tool NAME`, inside a Windows sandbox (an app container) that sees, of the person's files, only that folder;
 no network unless allowed, and no Ibasho. **The person:** whether they're on. Tell them what the sandbox contains
 and what it doesn't ([tools.md](tools.md): Windows still lets it read some things, like user environment
 variables), and that a tool's output reaches the model's provider like everything else. With their yes:
 
-1. `ibasho tool setup` downloads a Python for the tools (about 12 MB, from python.org), makes the sandbox, and tests
-   it on this machine.
+1. `ibasho tool setup` downloads a Python for the tools (about 12 MB, from python.org), makes the sandbox and the
+   agent's `tools\` folder (nothing else in its folder), and tests the sandbox on this machine.
 2. In `[tools]`, set `enabled = true` (and `network = true` only if they want that too). With the keeper, the agent
    learns about tools at its next wake; otherwise, tell it.
 
@@ -414,8 +427,8 @@ in the registry and under `%LOCALAPPDATA%\Packages`: run it before deleting anyt
 
 Then the viewer's folder and the install's home (`%USERPROFILE%\Ibasho` by default) can go. The home holds the
 config, the event log, the keeper's logs, the agent's Claude Code folder (with the keeper), the tools' Python
-(`tools-runtime\`) and the agent's life folder, which is its memory and its tools: ask the person whether to keep a
-copy, and the agent too if it's awake to ask. Finally, `pip uninstall ibasho`. Apart from the tools' app container,
+(`tools-runtime\`) and the agent's folder, with its tools and, with the keeper, its memory: ask the person whether
+to keep a copy, and the agent too if it's awake to ask. Finally, `pip uninstall ibasho`. Apart from the tools' app container,
 Ibasho writes nothing to the registry, and it adds no shortcuts or services. Another harness's own transcripts and
 settings are wherever it keeps them.
 

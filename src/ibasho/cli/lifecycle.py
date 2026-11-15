@@ -108,7 +108,7 @@ def check(ctx: Ctx, a):
 
 def uninstall(ctx: Ctx, a):
     """Lists everything an install leaves on the machine; deletes only the viewer's own folders, on request. The
-    install's home (the agent's memory among it) is never deleted from here."""
+    install's home and the agent's folder are never deleted from here."""
     try:
         cfg = ctx.cfg
     except Fail:
@@ -132,13 +132,15 @@ def uninstall(ctx: Ctx, a):
           + " (`ibasho uninstall --viewer-data` deletes them).")
     if cfg and cfg.data_dir_setting:
         print(f"  4. The data folder (event log, pictures, keeper logs): {cfg.data_dir}")
-    print(f"  {5 if cfg and cfg.data_dir_setting else 4}. This install's home, {home}: config.toml, data, the "
-          "agent's life folder (its memory and tools: keep a copy if it should live on), claude/, its Claude Code "
-          "folder, and tools-runtime/, the tools' Python.")
+    agent_folder = cfg.agent_dir if cfg else Path(home) / "life"
+    print(f"  {5 if cfg and cfg.data_dir_setting else 4}. This install's home, {home}: config.toml, data, "
+          "claude/ (the keeper's Claude Code folder for the agent) and tools-runtime/ (the tools' Python); and the "
+          f"agent's folder, {agent_folder}: its tools and whatever else it keeps there (with the keeper, its memory), so "
+          "keep a copy if it's wanted.")
     print("  Then `pip uninstall ibasho`. Apart from the tools' app container, Ibasho writes nothing to the registry, "
           "and it adds no shortcuts or services.")
     print("  With keeper.claude_config = \"shared\", the agent's Claude Code transcripts are in your own Claude Code "
-          "folder, under projects/ named after the life folder's path.")
+          "folder, under projects/ named after the agent's folder's path.")
     if not a.viewer_data:
         return
     if cfg and (viewer_pid(cfg) or (cfg.token_file.exists() and ctx.api.is_up())):

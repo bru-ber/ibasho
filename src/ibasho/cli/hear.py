@@ -32,7 +32,7 @@ ROOM_SOCIAL = re.compile(
 
 
 def register(sub):
-    p = sub.add_parser("watch", help="one line per event worth waking for, forever (run it under Monitor)")
+    p = sub.add_parser("watch", help="one line per event worth waking for, forever (run it under something that watches a command's output, such as Claude Code's Monitor tool)")
     p.add_argument("--exit-on-wake", action="store_true",
                    help="return after the first such batch, with any group chat held for a digest (other harnesses)")
     p.add_argument("--timeout", type=float, default=0, help="with --exit-on-wake: give up after this many seconds")

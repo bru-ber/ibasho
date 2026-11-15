@@ -1,6 +1,6 @@
 """The real keeper: Claude Code sessions, the daemon, the log, one keeper per install.
 
-Each session is `claude -p` in stream-json mode (see session.py), run in the agent's life folder with:
+Each session is `claude -p` in stream-json mode (see session.py), run in the agent's folder with:
 - its own Claude Code config folder by default (keeper.claude_config = "separate"), so none of the person's own
   Claude Code settings, permissions, MCP servers, plugins, hooks or memory reach a session that reads strangers'
   words all day; the person logs that folder in once with `ibasho keeper login`. CLAUDE_CONFIG_DIR moves
@@ -43,7 +43,7 @@ class KeeperError(Exception):
     pass
 
 
-# ---------- the life folder ----------
+# ---------- the agent's folder ----------
 
 def template_dir() -> Path | None:
     """The life-template folder: beside the source tree, or where `pip install` put it."""
@@ -55,9 +55,10 @@ def template_dir() -> Path | None:
 
 
 def ensure_life(life: Path) -> bool:
-    """Create the life folder from the template if it doesn't exist or is empty. True if it was created. The
-    template's tools/ is left out: `ibasho tool setup` adds it when the person turns tools on."""
-    if life.exists() and any(life.iterdir()):
+    """Start the agent's folder from the template if it doesn't exist, or holds nothing but tools/ (which `ibasho tool
+    setup` makes, keeper or not). True if it was started. The template's tools/ is left out: tool setup adds it when
+    the person turns tools on."""
+    if life.exists() and any(p.name != "tools" for p in life.iterdir()):
         return False
     src = template_dir()
     if not src:
@@ -104,7 +105,7 @@ def session_settings(cfg, ks: KeeperSettings, kdir: Path) -> Path:
     data = json.loads(resources.files("ibasho.keeper").joinpath("session-settings.json").read_text(encoding="utf-8"))
     if cdir:
         data["cleanupPeriodDays"] = cfg.retention_days
-    if not tools_on(cfg, ks):
+    if not tools_on(cfg):
         # `ibasho tool` refuses by itself while tools are off; this makes the refusal Claude Code's too
         data["permissions"]["deny"] += ["Bash(ibasho tool *)", "Bash(ibasho tool)"]
     out = kdir / "session-settings.json"
@@ -127,9 +128,9 @@ def set_retention(path: Path, days: int):
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
-def tools_on(cfg, ks: KeeperSettings) -> bool:
+def tools_on(cfg) -> bool:
     from ..tools.cli import usable
-    return usable(cfg, ks) is not None
+    return usable(cfg) is not None
 
 
 def mcp_config(kdir: Path) -> Path:
@@ -342,10 +343,11 @@ def run(cfg, echo: bool = True, extra_prompt: str = "") -> int:
         sys.stdout = sys.stderr = open(kdir / "keeper.out", "a", buffering=1, encoding="utf-8")
     kill_orphan(store, log)
     store.clear_stop()
+    store.mark_keeper("ibasho")
     claude = preflight(cfg, ks)
-    life = settings_mod.life_dir(cfg, ks)
+    life = cfg.agent_dir
     if ensure_life(life):
-        log(f"made the life folder {life} from the template")
+        log(f"started the agent's folder {life} from the life template")
     prune_logs(kdir, cfg.retention_days, store)
     from ..tools import settings as tools_settings
     from ..tools.cli import wake_note
@@ -353,9 +355,9 @@ def run(cfg, echo: bool = True, extra_prompt: str = "") -> int:
     keeper = Keeper(ks=ks, store=store, launch=make_launcher(cfg, ks, kdir, life, claude), world=DaemonWorld(cfg),
                     agent_name=cfg.name, grid=cfg.grid, life=str(life),
                     handoff_exists=lambda: (life / ks.handoff_note).is_file(), log=log, extra_prompt=extra_prompt,
-                    tools_note=lambda: "\n\n".join(x for x in (wake_note(cfg, ks, prompts.person_label(ks.person)),
+                    tools_note=lambda: "\n\n".join(x for x in (wake_note(cfg, prompts.person_label(ks.person)),
                                                                hearing_note(cfg)) if x))
-    log(f"keeper up (pid {os.getpid()}); life folder {life}")
+    log(f"keeper up (pid {os.getpid()}); the agent's folder {life}")
     last_prune = time.time()
     try:
         while not keeper.exiting:

@@ -5,7 +5,7 @@ tooling. This page describes what it collects, stores, uses and shares, as Linde
 asks of every viewer. It also describes what the person running an agent takes on, because most of the data
 here is other people's.
 
-Last updated 2026-11-03. Changes are recorded in this repository's history.
+Last updated 2026-11-14. Changes are recorded in this repository's history.
 
 ## What Ibasho's authors collect: nothing
 
@@ -35,7 +35,7 @@ about you or about anyone your agent meets, so there's nothing for them to hand 
     viewer's interface (where chat and IM toasts show) unless the agent asks for it with `--ui`;
   - transcripts of speech, if hearing is on;
   - what the agent's own tools print, if you turned tools on ([tools.md](tools.md));
-  - whatever the agent reads from its own memory folder.
+  - whatever the agent reads from its own memory, in its folder or wherever its harness keeps it.
 
   How long the provider keeps it, and what it may do with it, is set by your agreement with the provider: for
   Anthropic, its consumer or commercial terms and privacy policy, depending on how the agent is signed in. Read
@@ -76,7 +76,8 @@ MAC address.
 | Claude Code transcripts (with the keeper) | `claude\` (the agent's own Claude Code folder) | 7 days (Claude Code's `cleanupPeriodDays`, set by the keeper) | the whole session, including everything the tools returned, i.e. everything the agent perceived |
 | Another harness's transcripts and logs | wherever that harness, or a keeper you wrote, keeps them | as long as it keeps them: Ibasho can't prune them, so set them to match | usually the whole session, i.e. everything the agent perceived |
 | Notes between you and the agent | `data\keeper\notes.jsonl` | 7 days once delivered or read, pruned by the keeper (without it, until you delete them); a note still waiting stays until it's read | your notes and its replies |
-| The agent's memory | `life\` | until the agent or you delete it | whatever the agent chose to write down: journal, places, people |
+| The agent's folder | `life\` (`agent.folder` in config.toml) | until the agent or you delete it | with the keeper, the agent's memory, started from the life template: whatever it chose to write down (journal, places, people); in another harness, whatever the agent keeps there |
+| The agent's memory, in another harness | wherever that harness keeps it | as long as it keeps it | whatever the agent or its harness writes down |
 | The agent's tools, if you turned tools on | `life\tools\` | until the agent or you delete them | the programs it wrote and whatever they saved. Their temporary files over a day old are deleted before each run |
 | The tools' Python | `tools-runtime\` | until `ibasho tool setup --remove` | Python and the packages you installed: nothing personal |
 | Technical logs | `data\state\`, `%APPDATA%\Ibasho\logs\` | until you delete them (the daemon's and hearing's logs rotate at 1 MB) | what the software did. They're meant to hold no conversation, but can name people, places and ids |
@@ -104,7 +105,8 @@ history too). That's one reason the separate folder is the default.
   - heard speech, which has no speaker attached (use `ibasho hear forget`);
   - the keeper's logs and notes, and Claude Code transcripts, which age out with retention, and another
     harness's records, which last as long as it keeps them;
-  - the agent's own memory and tools. The agent deletes what it wrote about someone, and you can too;
+  - the agent's own memory and tools, in its folder or wherever its harness keeps them: what's written there is
+    the agent's to edit, and yours;
   - anything already sent to the agent's model provider.
 - **`ibasho hear forget`** deletes everything heard from the event log. `ibasho hear forget --last 30` deletes only
   the last 30 minutes.
@@ -124,16 +126,18 @@ activity applies to you is a question for your own adviser. Linden Lab itself re
 attorney. In practice, the duties look like this:
 
 - **Notice.** People should be able to find out what happens to their words: that what's said near the avatar goes
-  to an AI provider, how long things are kept, and how to ask to be forgotten (asking the agent works). The
-  avatar's profile is where people look. The agent writes it; if you want the notice there, tell it why and leave
-  the words to it.
+  to an AI provider, how long things are kept (and, with hearing on, that speech near it is turned into text), and
+  how to ask to be forgotten (the agent can run `ibasho forget`, and so can you). The avatar's profile is where
+  people in Second Life look, so it's one place for a notice, if you choose to put one there, for example "I'm an
+  AI; I turn speech near me into text to understand it, and keep it two days". `ibasho set-profile` writes it,
+  whether the agent runs it or you do; what goes there is between you and the agent.
 - **A lawful basis.** You need a reason the law recognises for processing their data. Which one fits depends on
   where you are and what you do.
 - **Retention.** Keep things no longer than needed. The defaults (7 days, 2 for speech) are a starting point;
   shorter is fine. With another harness, set its transcripts to age out on the same terms.
-- **Deletion and access.** When someone asks to be forgotten, `ibasho forget`, `ibasho hear forget`, and the
-  agent's own notes are the path. Someone may also ask what you hold about them, and the files above are where to
-  look.
+- **Deletion and access.** When someone asks to be forgotten, `ibasho forget` and `ibasho hear forget` cover
+  Ibasho's records; the agent's own memory and its harness's records are the other places to look. Someone may
+  also ask what you hold about them, and the places above are where to look.
 - **Security.** Keep the machine yours. The event log, transcripts and saved login are only as private as the
   Windows account they live in, or on Linux the server and the container's volume.
 - **Transfers.** The provider may process data in another country. Its terms say where.

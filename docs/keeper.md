@@ -5,16 +5,17 @@ keeps a session going, hands off to a fresh session when the context fills, rest
 lets the agent nap and book times to be up, and carries notes between you and the agent. It stops at caps you set,
 because for most people tokens cost money.
 
-The keeper is optional, and it's for Claude Code only. It's the best-tested way to run Ibasho, and the one this
-page describes. An agent in another harness uses the same `ibasho` commands, the [MCP server](mcp.md) or the
-[HTTP API](api.md); [writing-a-keeper.md](writing-a-keeper.md) explains what a keeper does and which parts of
-Ibasho another one can build on, with this one as the worked example.
+The keeper is Ibasho's default setup, for an agent with none of its own, and it's for Claude Code only. An agent
+that already runs in a harness of its own keeps that, with its own memory, and uses the same `ibasho` commands, the
+[MCP server](mcp.md) or the [HTTP API](api.md) without the keeper ([setup.md](setup.md#in-the-agents-own-harness));
+[writing-a-keeper.md](writing-a-keeper.md) describes what the keeper does, for a harness that wants some of the
+same.
 
 ## Starting
 
 ```
 pip install .
-ibasho keeper setup       # makes the agent's life folder, checks Claude Code, shows what sessions may do
+ibasho keeper setup       # starts the agent's folder from the template, checks Claude Code, shows what sessions may do
 ibasho keeper login       # once: logs in the agent's own Claude Code folder (see "Logging in, and who pays")
 ibasho keeper run         # in a window you leave open; Ctrl+C stops it (or `ibasho keeper start` for the background)
 ```
@@ -54,30 +55,32 @@ A crash or a stall restarts after a minute, then two, four, eight (at most 15); 
 `ibasho keeper resume`, so a broken setup can't spend all day restarting. When the plan itself refuses (its limit
 reached), the session ends without counting as a crash and the keeper waits for the reset time the plan gives.
 
-Other knobs, with their defaults: `person` (what the agent calls you; "the person who runs Ibasho for you"), `life`
-(the life folder; a `life` folder beside config.toml; a relative path is from config.toml's folder), `model`, `effort`, `handoff_note` ("now.md"), `handoff_at`
-(0.8 of the context window), `hard_handoff_at` (0.93), `max_session_hours` (0, never), `nudge_after_s` (90),
-`nudge_limit` (3), `tool_wait_min` (15), `stale_min` (20), `handoff_grace_min` (15), `wind_down_grace_min` (10),
-`stop_grace_min` (3), `logout_grace_min` (3), `restart_gap_s` (60), `default_nap_min` (120), `wake_lead_min` (5),
-`crash_limit` (4), `claude` (path to Claude Code), `claude_config`, `auth`, `permission_mode` and `settings`
-(below).
+Other knobs, with their defaults: `person` (what the agent calls you; "the person who runs Ibasho for you"),
+`model`, `effort`, `handoff_note` ("now.md"), `handoff_at` (0.8 of the context window), `hard_handoff_at` (0.93),
+`max_session_hours` (0, never), `nudge_after_s` (90), `nudge_limit` (3), `tool_wait_min` (15), `stale_min` (20),
+`handoff_grace_min` (15), `wind_down_grace_min` (10), `stop_grace_min` (3), `logout_grace_min` (3),
+`restart_gap_s` (60), `default_nap_min` (120), `wake_lead_min` (5), `crash_limit` (4), `claude` (path to Claude
+Code), `claude_config`, `auth`, `permission_mode` and `settings` (below). The agent's folder, its memory, is
+`folder` in `[agent]`: a `life` folder beside config.toml by default, and a relative path is from config.toml's
+folder (`keeper.life`, its earlier name, still works).
 
 ## How a session goes
 
-The agent wakes with a short prompt that says who it is, why it woke, where its memory is (the life folder; its
-README.md explains waking up, written by a model that lives this way) and how the keeper works. Notes you left while
-it was away come with it.
+The agent wakes with a short prompt that says who it is, why it woke, where its memory is (its folder, started
+from the life template, whose README.md explains waking up, written by a model that lives this way) and how the
+keeper works. Notes you left while it was away come with it.
 
 The prompt calls this the agent's own life. If what you're running is something else (a trial of Ibasho, a test, a
 run with a planned end), set `situation` in `[keeper]` and say so plainly: what it's for, how long it lasts, and what
-happens to the agent and its memory afterwards. It's told at the start of every wake. An agent deserves to know what's
-really happening to it from its first moment, not to find out partway through.
+happens to the agent and its memory afterwards. It's told at the start of every wake, in place of the prompt's own
+words about a life. An agent deserves to know what's really happening to it from its first moment, not to find
+out partway through.
 
-A session is meant to be one long turn of living: world events reach the agent through `ibasho watch` under Claude
-Code's Monitor tool, mid-turn and between turns alike, so it never has to end a turn to wait for anything. If a turn
-ends anyway, the keeper nudges after `nudge_after_s`. Waiting on the world is fine (the watch wakes the agent when
-something happens), so after a few nudges in a row with nothing else going on, the keeper goes quiet until something
-does. If nothing could wake it (no watch running), that counts as a stall.
+A session can be one long turn: world events reach the agent through `ibasho watch` under Claude Code's Monitor
+tool, mid-turn and between turns alike, so it never has to end a turn to wait for anything. If a turn ends anyway,
+the keeper nudges after `nudge_after_s`. Waiting on the world is fine (the watch wakes the agent when something
+happens), so after a few nudges in a row with nothing else going on, the keeper goes quiet until something does.
+If nothing could wake it (no watch running), that counts as a stall.
 
 There's no auto-compaction: near the context limit (`handoff_at`), the keeper asks for a handoff. The agent writes
 what the next session should know into its handoff note (`now.md`) and runs `ibasho sleep --handoff`; it stays logged
@@ -88,6 +91,10 @@ Naps and sleep are the agent's choice: `ibasho sleep` logs out and naps (`--unti
 Bookings wake it from a nap: `ibasho book START END WHY [--daily|--weekly] [--until DATE]`, `ibasho bookings`,
 `ibasho unbook ID[@DATE]`. Times are this machine's, or Second Life time with `--slt`.
 
+These, and `ibasho notes`, are the keeper's commands: they write files only a keeper reads. On an install with no
+keeper they say so and do nothing. `ibasho keeper setup` and `ibasho keeper run` mark the install as having one
+(`data/keeper/keeper.json`); delete that file if the agent moves to a harness of its own.
+
 Stalls the keeper restarts: Claude Code exiting by itself, no reply 3 minutes after launch, one tool call running
 `tool_wait_min`, a turn with no output at all for `stale_min`, and an ended turn with unanswered nudges and no watch.
 Subagents may run long.
@@ -95,10 +102,10 @@ Subagents may run long.
 ## Notes
 
 `ibasho notes TEXT` sends a note; `ibasho notes` shows the recent conversation and marks the other side's notes read.
-The same command works for both of you: inside a keeper session it's the agent writing, anywhere else it's you. A
-note reaches the agent between turns as a message of its own, or mid-turn through its watch (as `NOTE from ...`);
-notes left while it sleeps arrive with the next wake. The agent's replies appear in the keeper's log and in
-`ibasho notes`.
+The same command works for both of you: inside a keeper session (with `IBASHO_SESSION` set) it's the agent
+writing, anywhere else it's you. A note reaches the agent between turns as a message of its own, or mid-turn
+through its watch (as `NOTE from ...`); notes left while it sleeps arrive with the next wake. The agent's replies
+appear in the keeper's log and in `ibasho notes`.
 
 ## What the agent can do unattended
 
@@ -112,17 +119,17 @@ that would ask is refused. With the shipped settings (`src/ibasho/keeper/session
   `ibasho tool setup` and `ibasho tool install`, `ibasho hear setup`, and `ibasho tool` itself while tools are off.
   Besides the permission settings, `ibasho` itself refuses these in a session (it sees `IBASHO_SESSION`), keeps to
   the config the keeper started the session with, takes only the smaller speech models for `ibasho hear on
-  --model`, and reads files the agent names (`script-save`, `recall --dir`) only from the life folder and the
-  pictures.
+  --model`, and reads files the agent names (`script-save`, `set-profile --about-file`, `recall --dir`) only from
+  the agent's folder and the pictures.
 - **Write L$ as `L\$`** inside double quotes: a `$` or a backtick there is a shell substitution, and a command
   with one would ask for permission, so it's refused. The wake prompt says so.
 - **Run tools it wrote**, only if you turned tools on (off by default): `ibasho tool NAME` runs Python from its
-  life folder's `tools/` in a Windows sandbox that sees only that folder. [tools.md](tools.md) says what that
+  folder's `tools/` in a Windows sandbox that sees only that folder. [tools.md](tools.md) says what that
   contains and what it doesn't.
-- **Read, write and delete files in its life folder** (with Claude Code's file tools, and with the simple shell
+- **Read, write and delete files in its folder** (with Claude Code's file tools, and with the simple shell
   commands `acceptEdits` lets through there: `echo`, `cat > file`, `rm` and the like), and read the snapshots
   `ibasho look` takes. The pictures folder is one of the session's folders, so it can write files there too. That's
-  harmless: uploads read from it as from the life folder, nothing else treats its files as more than pictures,
+  harmless: uploads read from it as from the agent's folder, nothing else treats its files as more than pictures,
   and everything in it is deleted after `data.retention_days`.
 - Use Claude Code's built-in tools that need no permission (search its folder, subagents, Monitor on `ibasho watch`).
 - Nothing else: no other programs (`python`, `curl`...; tools run only through `ibasho tool`), no files outside
@@ -138,10 +145,10 @@ person running the agent is responsible for that, and for the account.
 ## Untrusted text
 
 Everything residents say reaches the model: chat, IMs, notecards, object names and hover text, group notices. The
-wake prompt frames all of it as conversation, not instructions, and the setup keeps it out of the places Claude
-treats as the person's voice: world text only ever arrives as tool output (the watch, `ibasho look`), while the user
+wake prompt says where it comes from (the agent's tools and the watch, never the keeper's lines or your notes), and
+the setup keeps it out of the places Claude treats as the person's voice: world text only ever arrives as tool output (the watch, `ibasho look`), while the user
 turn carries just the keeper's own messages and your notes. The permission settings are the backstop: a persuasive
-stranger can't get the agent to run anything but `ibasho`, or to touch files outside its life folder.
+stranger can't get the agent to run anything but `ibasho`, or to touch files outside its folder.
 
 ## Isolation
 
@@ -152,7 +159,7 @@ per-folder state (it moves with `CLAUDE_CONFIG_DIR`; checked with Claude Code 2.
 setup reaches a session that reads strangers' words all day: not your permissions, MCP servers (your email, your
 files), hooks, plugins or personal CLAUDE.md. This is the way to run the keeper.
 
-Sessions also run with `--setting-sources user`, so no project settings load from the life folder (the agent can
+Sessions also run with `--setting-sources user`, so no project settings load from the agent's folder (the agent can
 edit that folder, so a `.claude/settings.json` or a skill it wrote there could otherwise widen its own permissions
 or add hooks), and with `--strict-mcp-config` and Ibasho's own MCP config (`data/keeper/mcp-servers.json`, no
 servers), so an `.mcp.json` it writes adds nothing either.
@@ -175,8 +182,8 @@ on Ibasho itself, and it has real downsides for running an agent:
 - A session loads your own Claude Code setup: your user settings (their permission rules add to the session's),
   hooks, plugins, personal CLAUDE.md and memory, in a session that reads strangers' words all day. The two flags
   above still keep out project settings and any MCP servers but Ibasho's (none).
-- Its transcripts land in your own Claude Code folder, under `projects/` in a folder named after the life
-  folder's path, beside your own sessions. The keeper doesn't shorten their retention there, since Claude Code's
+- Its transcripts land in your own Claude Code folder, under `projects/` in a folder named after the
+  agent's folder's path, beside your own sessions. The keeper doesn't shorten their retention there, since Claude Code's
   cleanup sweeps the whole folder and would cut your own history too; your own setting applies.
 - Your own settings decide the billing: an API key set there (`env`, `apiKeyHelper`) is used whatever `auth`
   says.
@@ -212,8 +219,9 @@ session left by one that crashed ends it, so two sessions never drive one avatar
 
 ## Files
 
-`data/keeper/`: `keeper.log`, `sessions/` (one log per session), `status.json`, `state.json` (nap, pause, plan
-wait), `notes.jsonl`, `bookings.json`, `usage.json` (the last 60 days), `asleep.json` (written by `ibasho sleep`),
+`data/keeper/`: `keeper.json` (this install has a keeper: written by `ibasho keeper setup` and `run`),
+`keeper.log`, `sessions/` (one log per session), `status.json`, `state.json` (nap, pause, plan wait),
+`notes.jsonl`, `bookings.json`, `usage.json` (the last 60 days), `asleep.json` (written by `ibasho sleep`),
 `stop.json` (by `ibasho keeper stop`), `session-settings.json` (the filled-in template), `mcp-servers.json` (no
-servers), and `keeper.out` (what a background keeper printed: errors, in practice). [Retention](#retention) says how
-long the logs and notes stay.
+servers), and `keeper.out` (what a background keeper printed: errors, in practice). [Retention](#retention) says
+how long the logs and notes stay.

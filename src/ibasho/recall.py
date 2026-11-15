@@ -1,9 +1,10 @@
-"""`ibasho recall`: search the agent's own memory folder and print short, dated, ranked snippets.
+"""`ibasho recall`: search the Markdown in the agent's folder (with the keeper, its memory) or another of its
+folders, and print short, dated, ranked snippets.
 
     ibasho recall WORDS [--in FOLDER[,FOLDER]] [-n N] [--full]
 
 WORDS are plain words ("what do I know about the lighthouse", "harbour market"); question words drop out, and
-"quoted phrases" must appear as written. --in narrows the search to top-level folders of the memory folder (or
+"quoted phrases" must appear as written. --in narrows the search to top-level folders of the folder searched (or
 `top` for the files directly in it); the default is everything.
 
 Every Markdown file is cut into chunks (a paragraph, a list item, or a line of a notes-style file) and scored by
@@ -321,29 +322,21 @@ def recall(root: Path, query: str, scopes: set[str] | None = None, n: int = 6, f
 # ---------- the command ----------
 
 def register(sub):
-    p = sub.add_parser("recall", help="search my memory folder: ranked, dated snippets")
+    p = sub.add_parser("recall", help="search the Markdown files in my folder (or --dir): ranked, dated snippets")
     p.add_argument("query", nargs="+")
     p.add_argument("--in", dest="scope", default="all",
                    help="top-level folders to search, comma-separated (`top` = the files directly in it)")
     p.add_argument("-n", type=int, default=6, help="snippets to show")
     p.add_argument("--full", action="store_true", help="whole chunks instead of snippets")
-    p.add_argument("--dir", help="the folder to search (default: the keeper's life folder)")
+    p.add_argument("--dir", help="the folder to search (default: the agent's folder, agent.folder in config.toml)")
     p.set_defaults(fn=run)
 
 
 def run(ctx, a):
     from .cli.common import Fail
-    if a.dir:
-        root = ctx.agent_path(a.dir, "folder")
-    else:
-        from .config import ConfigError
-        from .keeper import settings as ksettings
-        try:
-            root = ksettings.life_dir(ctx.cfg, ksettings.load(ctx.cfg))
-        except ConfigError as e:
-            raise Fail(str(e)) from None
+    root = ctx.agent_path(a.dir, "folder") if a.dir else ctx.cfg.agent_dir
     if not root.is_dir():
-        raise Fail(f"no memory folder at {root}")
+        raise Fail(f"no folder at {root}")
     scopes = {s.strip() for s in a.scope.split(",") if s.strip()}
     known = {"all", "top"} | {p.name for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")}
     if bad := scopes - known:

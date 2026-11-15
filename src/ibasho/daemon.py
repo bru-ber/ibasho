@@ -39,7 +39,6 @@ from .config import Config, ConfigError, MATURITY, flag_check, is_linden_grid, l
 from .editor import EditorClient, RPCError
 from .eventlog import EventLog, involves, notification_time
 from .hearing import settings as hearing_settings
-from .keeper import settings as keeper_settings
 from .leap import AUTH_MAGIC, LeapError, LeapPeer, parse, read_frame, to_jsonable
 from .policy import UPLOAD_OPS, Ledger, Policy, StageError, ViewerState, prune_staged, stage_upload
 
@@ -126,7 +125,7 @@ class Daemon:
         self.events = EventLog(cfg.events_dir, cfg.retention_days)
         self.ledger = Ledger(cfg.state_dir / "ledger.json")
         self.policy = Policy(cfg.caps, self.ledger, chat_logs=cfg.viewer_chat_logs, shots=cfg.shots_dir,
-                             readable=[keeper_settings.life_dir_of(cfg), cfg.shots_dir], allow=cfg.policy_allow)
+                             readable=[cfg.agent_dir, cfg.shots_dir], allow=cfg.policy_allow)
         self.config_mtime = cfg.path.stat().st_mtime if cfg.path.exists() else 0
         self.editor_lock = asyncio.Lock()
         self.peer: LeapPeer | None = None

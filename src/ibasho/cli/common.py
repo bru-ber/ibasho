@@ -48,22 +48,17 @@ class Ctx:
             self._api = Api(self.cfg)
         return self._api
 
-    @property
-    def life(self) -> Path:
-        from ..keeper import settings as keeper_settings
-        return keeper_settings.life_dir_of(self.cfg)
-
     def agent_path(self, path: str | Path, what: str = "file") -> Path:
-        """A path the agent gave for ibasho to read. In the agent's sessions only its life folder and the pictures
-        folder: the session can't read other files itself, and ibasho mustn't do it for it. Relative paths are
-        from where the command runs (the life folder, in a keeper session)."""
+        """A path the agent gave for ibasho to read. In the agent's sessions only its folder and the pictures
+        folder: a session kept to those can't read other files itself, and ibasho mustn't do it for it. Relative
+        paths are from where the command runs (the agent's folder, in a keeper session)."""
         if re.match(r"^[A-Za-z]:[^\\/]", str(path)):   # C:\a\b unquoted in a POSIX shell arrives as C:ab
             raise Fail(f"{what} {path}: no such file (did a shell eat the backslashes? write the path with /, or "
                        "quote it)")
         p = Path(os.path.abspath(path))
-        if in_session() and not config_mod.inside(p, self.life, self.cfg.shots_dir):
-            raise Fail(f"{what} {path}: in the agent's sessions ibasho reads only the life folder ({self.life}) and "
-                       f"the pictures ({self.cfg.shots_dir})")
+        if in_session() and not config_mod.inside(p, self.cfg.agent_dir, self.cfg.shots_dir):
+            raise Fail(f"{what} {path}: in the agent's sessions ibasho reads only the agent's folder "
+                       f"({self.cfg.agent_dir}) and the pictures ({self.cfg.shots_dir})")
         return p
 
     def state_file(self, name: str) -> Path:

@@ -1,6 +1,8 @@
 """The keeper's files, shared by the keeper process and the `ibasho` commands (the agent's and the person's).
 
 All in data/keeper/:
+  keeper.json    a keeper looks after this install's sessions, so the agent's commands (sleep, book, notes...) have
+                 something to honour them: written by `ibasho keeper setup` and `run`, or by another keeper
   state.json     nap, crash pause, plan-limit wait (the keeper and the commands both write it)
   status.json    written by the keeper: what it's doing and why, the running session
   asleep.json    written by `ibasho sleep` inside a session: that session is done (or handing off)
@@ -131,6 +133,14 @@ class Store:
 
     def save_status(self, st: dict):
         _write(self.path("status.json"), st)
+
+    def has_keeper(self) -> bool:
+        return self.path("keeper.json").is_file()   # whatever it holds: another keeper's may hold anything
+
+    def mark_keeper(self, name: str):
+        """Say that a keeper (`name`) looks after this install. Left as it is if one already says so."""
+        if not self.path("keeper.json").is_file():
+            _write(self.path("keeper.json"), {"keeper": name, "t": time.time()})
 
     # ---- sleep and stop ----
 

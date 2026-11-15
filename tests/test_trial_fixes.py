@@ -177,9 +177,9 @@ def test_another_config_is_refused_in_a_session(home, capsys, monkeypatch, tmp_p
     other.mkdir()
     other_cfg = write_config(other)
     monkeypatch.setenv("IBASHO_SESSION", "s1")
-    code, _, err = run(other_cfg.path, capsys, "notes")
+    code, _, err = run(other_cfg.path, capsys, "tool", "list")
     assert code == 1 and "`--config`" in err
-    code, _, err = run(cfg.path, capsys, "notes")    # the session's own config, spelled out: fine
+    code, _, err = run(cfg.path, capsys, "tool", "list")    # the session's own config, spelled out: fine
     assert code == 0
 
 
@@ -197,9 +197,16 @@ def test_files_the_agent_names_stay_in_its_folders(home, capsys, monkeypatch, tm
     (outside / "secret.lsl").write_text("default {}", encoding="utf-8")
     monkeypatch.setenv("IBASHO_SESSION", "s1")
     code, _, err = run(cfg.path, capsys, "script-save", "abc", "s", str(outside / "secret.lsl"))
-    assert code == 1 and "reads only the life folder" in err
+    assert code == 1 and "reads only the agent's folder" in err
     code, _, err = run(cfg.path, capsys, "recall", "anything", "--dir", str(outside))
-    assert code == 1 and "reads only the life folder" in err
+    assert code == 1 and "reads only the agent's folder" in err
+    code, _, err = run(cfg.path, capsys, "set-profile", "--about-file", str(outside / "secret.lsl"))
+    assert code == 1 and "reads only the agent's folder" in err
+    mine = cfg.agent_dir / "about.txt"
+    mine.parent.mkdir(parents=True)
+    mine.write_text("hello", encoding="utf-8")
+    code, _, err = run(cfg.path, capsys, "set-profile", "--about-file", str(mine))
+    assert "reads only" not in err      # read, then on to the viewer (none running here)
 
 
 # ---------- the browser guard ----------

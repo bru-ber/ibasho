@@ -178,18 +178,18 @@ def test_a_session_keeps_the_config_it_started_with(home, capsys, monkeypatch, t
     other = write_config(other_home)
     monkeypatch.setenv("IBASHO_SESSION", "s-keep")
     monkeypatch.setenv("IBASHO_CONFIG", str(cfg.path))
-    assert main(["notes"]) == 0
+    assert main(["tool", "list"]) == 0
     monkeypatch.setenv("IBASHO_CONFIG", str(other.path))      # changed inside the session
     capsys.readouterr()
-    assert main(["notes"]) == 1 and "this session runs with the config" in capsys.readouterr().err
+    assert main(["tool", "list"]) == 1 and "this session runs with the config" in capsys.readouterr().err
     monkeypatch.delenv("IBASHO_CONFIG")
     monkeypatch.setenv("IBASHO_HOME", str(other_home))        # the same through IBASHO_HOME
-    assert main(["notes"]) == 1
+    assert main(["tool", "list"]) == 1
     monkeypatch.setenv("IBASHO_CONFIG", str(cfg.path))
-    assert main(["notes"]) == 0
+    assert main(["tool", "list"]) == 0
     monkeypatch.setenv("IBASHO_SESSION", "s-other")             # another session binds on its first use
     monkeypatch.setenv("IBASHO_CONFIG", str(other.path))
-    assert main(["notes"]) == 0
+    assert main(["tool", "list"]) == 0
 
 
 def test_the_keeper_binds_its_sessions(home, tmp_path):

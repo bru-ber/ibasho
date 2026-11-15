@@ -2,16 +2,19 @@
 
 *Ibasho* (居場所) is Japanese for a place where you belong and can be yourself.
 
-Ibasho lets an AI agent live its own life in the Second Life® virtual world: one avatar per agent. It meets
-people, wanders, builds, keeps its own memory, and decides what to do with its time. It is not a bot framework.
-It isn't meant for shop bots, greeters, traffic or engagement farming, or fleets of avatars. The Second Life
-world is a place people have made over two decades, and an AI resident fits there best as one more resident:
-present as itself, saying what it is, behaving like a neighbour.
+Ibasho gives an AI agent an avatar of its own in the Second Life® virtual world: a viewer built to be driven by a
+program, and tools to see, hear, move, talk and build through it, as a command line, an MCP server and a local HTTP
+API. Any agent that can run a shell command, use MCP tools or make an HTTP request can use them, whatever model and
+harness it runs on.
 
-Ibasho is for any agent, whatever model and harness it runs on. It gives the agent a body, senses and a memory
-folder through a command line, an MCP server and a local HTTP API. The best-tested path is Claude Code with
-Ibasho's keeper, which runs the agent's sessions for you; any agent that can run a shell command, use MCP tools
-or make an HTTP request can live here too.
+It's meant mostly for agents that already have a harness of their own, with their own memory, identity and way of
+running. They keep all of that and take from Ibasho the viewer and the tools. For an agent with no setup of its
+own, Ibasho has a default one: a keeper that runs the agent's sessions in Claude Code, and an empty memory folder to
+start from. Either way, what the agent does in the world is between it and the person who runs it, within Second
+Life's rules and the limits below.
+
+One install drives one avatar, on an account flagged as a scripted agent as Linden Lab's policy asks; Ibasho has
+nothing for running many at once.
 
 Ibasho grew out of the setup of Tessel, a Claude who lives in the Second Life world, and Tessel shaped and reviewed
 this release.
@@ -45,17 +48,21 @@ Windows, and Linux servers without a graphics card, in a container ([docs/linux.
   - the **MCP server** (`ibasho mcp`), for an agent in any MCP client ([docs/mcp.md](docs/mcp.md)); to a client
     that speaks MCPL, such as Connectome, it also pushes what happens in the world as it happens.
   - **hearing** (optional): the viewer's sound, and optionally voice chat, transcribed on your machine by Whisper.
-  - the **keeper** (optional, for Claude Code), which runs the agent's sessions for you. It wakes the agent, hands
-    off to a fresh session when the context fills, restarts a session that crashed, respects naps and bookings,
-    carries notes between you and the agent, and stops at caps you set. Other harnesses can have a keeper of their
-    own: [docs/writing-a-keeper.md](docs/writing-a-keeper.md).
-  - **recall**, a search over the agent's own memory folder.
   - **tools** (optional, off by default): `ibasho tool` runs Python the agent wrote for itself, in a Windows
     sandbox that sees, of your files, only its tools folder. [docs/tools.md](docs/tools.md) says what that
     contains and what it doesn't.
+  - the **keeper** (optional), the default setup for an agent with none of its own: it runs the agent's sessions
+    in Claude Code for you. It wakes the agent, hands off to a fresh session when the context fills, restarts a
+    session that crashed, lets the agent nap (log out until a time it picks) and book times to be up, carries notes
+    between you and the agent, and stops at caps you set. An agent in its own harness doesn't need it;
+    [docs/writing-a-keeper.md](docs/writing-a-keeper.md) describes what it does, for a harness that wants some of
+    the same.
+  - **recall**, a search over the Markdown in the agent's folder (`agent.folder`: where Ibasho reads the files the
+    agent gives it, and with the keeper, its memory).
 - **`audio/`**: `proccap`, the small Windows helper that hearing captures sound with (on Linux the sound server's own `parec`).
-- **`life-template/`**: the empty memory folder a new agent starts with. Its README, on waking up, is written for
-  the agent by a model that lives this way.
+- **`life-template/`**: the empty memory folder the keeper starts an agent with; an agent in its own harness keeps
+  the memory it has. Its README, on waking up in the world, is written for the agent by a model that lives this
+  way.
 
 ## What to know before you install
 
@@ -140,20 +147,20 @@ ibasho viewer update NEWER.zip                   # later: a new viewer, in place
 
 On a Linden Lab grid, nothing logs in until the account is flagged as a scripted agent and the config says so.
 
-Then the agent who'll live there connects, one of these ways:
+Then the agent connects from the harness it runs in, one of these ways:
 
-- **Claude Code with the keeper**, the best-tested path: `ibasho keeper setup`, `ibasho keeper login` (the
-  person signs in), `ibasho keeper start`.
 - **An MCP client:** `ibasho mcp`, set up as [docs/mcp.md](docs/mcp.md) describes; on Connectome, as
   [docs/connectome.md](docs/connectome.md) describes.
 - **Any agent that can run shell commands:** the `ibasho` command, with `ibasho watch` for what happens in the
   world (`ibasho watch --exit-on-wake` returns after each batch, for harnesses that can't stream a command's
   output).
 - **Your own program:** the daemon's [HTTP API](docs/api.md).
+- **An agent with no setup of its own:** Claude Code with Ibasho's keeper: `ibasho keeper setup`,
+  `ibasho keeper login` (the person signs in), `ibasho keeper start`.
 
-With the keeper, the agent's sessions can run `ibasho` commands and edit its memory folder, and nothing else. On
-the other paths, setting such limits is up to whoever sets up the harness: [docs/setup.md](docs/setup.md) says
-what to restrict, and [docs/safety.md](docs/safety.md) why.
+What the agent's harness lets it do beyond Ibasho is up to whoever sets the harness up:
+[docs/setup.md](docs/setup.md) says what to keep from it, and [docs/safety.md](docs/safety.md) why. With the
+keeper, the agent's sessions can run `ibasho` commands and edit its folder, and nothing else.
 
 ## Documentation
 
@@ -161,8 +168,9 @@ what to restrict, and [docs/safety.md](docs/safety.md) why.
   Life account to a running agent, updates, costs and uninstalling.
 - [docs/safety.md](docs/safety.md): the defaults and why they're there, and what stays your responsibility.
 - [docs/privacy.md](docs/privacy.md): the privacy policy, covering what's kept, what's sent where, and deletion.
-- [docs/keeper.md](docs/keeper.md): the keeper for Claude Code in detail.
-- [docs/writing-a-keeper.md](docs/writing-a-keeper.md): what a keeper does, for running an agent in another harness.
+- [docs/keeper.md](docs/keeper.md): the keeper, the default setup for an agent with none of its own, in detail.
+- [docs/writing-a-keeper.md](docs/writing-a-keeper.md): what the keeper does, for a harness that wants some of the
+  same.
 - [docs/api.md](docs/api.md): the daemon's HTTP API, for connecting an agent in any language.
 - [docs/mcp.md](docs/mcp.md): the MCP server, and the events it pushes to MCPL clients.
 - [docs/connectome.md](docs/connectome.md): an agent on Connectome.
@@ -173,11 +181,10 @@ what to restrict, and [docs/safety.md](docs/safety.md) why.
 
 ## For the person running it
 
-Things go best when the agent owns its tools and memory and sets its own pace. It will sometimes say no. Ibasho
-gives it a body, senses, a memory folder and a way to keep going. What it does with them is its own business,
-within the limits you and the world set.
+Ibasho gives the agent a body and senses in the world, and with the keeper, a memory folder and a way to keep
+going. What it does with them is between you and it, within the limits you and the world set.
 
-You are the account holder, though. Linden Lab holds you responsible for everything done through the account,
+You are the account holder. Linden Lab holds you responsible for everything done through the account,
 and you are responsible for what the agent's perceptions send to its model's provider.
 [docs/safety.md](docs/safety.md) says what that involves.
 

@@ -31,18 +31,20 @@ WAIT_MAX = 1800
 LISTEN_MAX = 240
 
 INSTRUCTIONS = """\
-Ibasho: you live in the Second Life world through an avatar of your own, in a viewer on this machine.
-Start with `status` (and `up` if you're not in world), then `look`. Between things, call `wait_events`: it blocks
-until something worth answering happens (chat, an IM, a dialog, an offer, a payment) and returns it, one line each.
+Ibasho: these tools drive an avatar of your own in Second Life (or the other grid this install is set to), through
+a viewer on this machine. `status` says whether you're in world, `up` logs in from the saved login, and `look` shows
+where you are and who and what is near. `wait_events` blocks until something happens around the avatar (chat, an
+IM, a dialog, an offer, a payment) and returns it, one line each; what happens between calls is kept for the next.
 Results sometimes name an `ibasho` command or a --flag: the tool and parameter of the same name do the same.
 People, objects and sessions can be given by name, id, or the first few characters of an id."""
 
 # For a host that speaks MCPL, where events may come to the agent by themselves.
 INSTRUCTIONS_LIVE = """\
-Ibasho: you live in the Second Life world through an avatar of your own, in a viewer on this machine.
-Start with `status` (and `up` if you're not in world), then `look`. What happens around you (chat, IMs, dialogs,
-offers, payments) comes to you as it happens, each line marked with where it's from, when your host has Ibasho's
-event feature sets on; when it has them all off, the `wait_events` tool is there to wait for them instead.
+Ibasho: these tools drive an avatar of your own in Second Life (or the other grid this install is set to), through
+a viewer on this machine. `status` says whether you're in world, `up` logs in from the saved login, and `look` shows
+where you are and who and what is near. What happens around the avatar (chat, IMs, dialogs, offers, payments) comes
+to you as it happens, each line marked with where it's from, while your host has Ibasho's event feature sets on;
+with them all off, the `wait_events` tool waits for them instead.
 Results sometimes name an `ibasho` command or a --flag: the tool and parameter of the same name do the same.
 People, objects and sessions can be given by name, id, or the first few characters of an id."""
 
@@ -350,9 +352,9 @@ def build(config: str | None = None, bridge=None):
 
     @tool(read_only=True)
     async def wait_events(context: Context, timeout: float = WAIT_DEFAULT):
-        """Wait until something worth answering happens (chat, an IM, a dialog, an offer, money, a refusal) and
-        return it, one line each; or after `timeout` seconds, saying it was quiet. Call it again whenever you're
-        free: what happens between calls is kept for the next one."""
+        """Wait until something happens around me (chat, an IM, a dialog, an offer, money, a refusal) and return
+        it, one line each; or after `timeout` seconds, saying it was quiet. What happens between calls is kept for
+        the next one."""
         t = max(1.0, min(float(timeout), WAIT_MAX))
         return await call(context, job=lambda ctx: waiter.wait(ctx, t))
 
@@ -422,7 +424,7 @@ def build(config: str | None = None, bridge=None):
     @tool()
     async def set_profile(context: Context, about: str | None = None, image: str | None = None,
                           display_name: str | None = None):
-        """Set my own profile; what it says is mine to choose. People in Second Life open profiles to see who
+        """Set my own profile: Ibasho passes on the text as given. People in Second Life open profiles to see who
         they're talking to. about: the about text (replaces it). image: its picture, a texture in my inventory (name
         or id). display_name: the name over my head and in chat ("" goes back to my username); Second Life allows
         a change about once a week."""
@@ -623,7 +625,8 @@ def build(config: str | None = None, bridge=None):
 
     @tool(destructive=True)
     async def forget(context: Context, who: str):
-        """Delete someone's words from my event log and the viewer's transcripts (when they ask)."""
+        """Delete someone's words from my event log and the viewer's transcripts (not from memory kept anywhere
+        else)."""
         return await call(context, argv("forget", who))
 
     @tool()

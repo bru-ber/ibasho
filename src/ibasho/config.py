@@ -96,6 +96,7 @@ class Config:
     http_port: int = 9270
     editor_port: int = 9220
     data_dir_setting: str = ""
+    agent_folder_setting: str = ""
     retention_days: int = 7
     probe_channel: int = 0
     caps: Caps = field(default_factory=Caps)
@@ -111,6 +112,14 @@ class Config:
     @property
     def data_dir(self) -> Path:
         return self.home / self.data_dir_setting if self.data_dir_setting else self.home / "data"   # absolute wins
+
+    @property
+    def agent_dir(self) -> Path:
+        """The agent's folder (agent.folder): the files it gives Ibasho to read (uploads always; script-save, recall
+        and the like in its sessions) come only from here and the pictures, and its tools live in tools/ here. With
+        the keeper it's the agent's memory too, started from the life template."""
+        s = self.agent_folder_setting
+        return self.home / Path(s).expanduser() if s else self.home / "life"   # relative: to config.toml
 
     @property
     def state_dir(self) -> Path:
@@ -372,6 +381,7 @@ def load(path: Path | None = None) -> Config:
     ports, data, caps, probe = raw.get("ports", {}), raw.get("data", {}), raw.get("caps", {}), raw.get("probe", {})
     c.name = _get(agent, "name", str, "").strip()
     c.nicknames = [str(n) for n in _get(agent, "nicknames", list, [])]
+    c.agent_folder_setting = agent_folder_setting(c.home, agent, raw.get("keeper", {}))
     c.grid = _get(grid, "name", str, c.grid).strip()
     c.login_uri = _get(grid, "login_uri", str, "").strip()
     c.scripted_agent_flag_confirmed = _get(grid, "scripted_agent_flag_confirmed", bool, False)
@@ -400,6 +410,20 @@ def load(path: Path | None = None) -> Config:
         setattr(c.server, k, _get(server, k, type(v), v))
     validate(c)
     return c
+
+
+def agent_folder_setting(home: Path, agent: dict, keeper: dict) -> str:
+    """agent.folder, or keeper.life, its earlier name (it sat with the keeper's settings but held without the keeper
+    too). Both set to different folders is a mistake to fix rather than guess at."""
+    new = _get(agent, "folder", str, "").strip()
+    old = keeper.get("life", "") if isinstance(keeper, dict) else ""
+    if not isinstance(old, str):
+        raise ConfigError(f"keeper.life: expected str, got {old!r}")
+    old = old.strip()
+    if new and old and (home / Path(new).expanduser()).resolve() != (home / Path(old).expanduser()).resolve():
+        raise ConfigError(f"agent.folder ({new}) and keeper.life ({old}), its older name, name different folders: "
+                          "keep agent.folder and remove keeper.life")
+    return new or old
 
 
 def validate(c: Config):
@@ -452,6 +476,11 @@ TEMPLATE = """\
 name = "{name}"
 # Other words people may call it by; a mention wakes the watch.
 nicknames = []
+# The agent's folder. Uploads (textures, sounds, animations) are read only from here and the pictures folder, and
+# so, in the agent's sessions, are the files it names to ibasho; its tools (`ibasho tool`) live in tools/ here.
+# With the keeper it's the agent's memory too. Empty = a "life" folder beside this file (a relative path is from
+# this file's folder too).
+folder = ''
 
 [grid]
 # secondlife (the main grid), aditi (the beta grid), or a name for another grid (e.g. "127.0.0.1-9000"; no ':').
@@ -498,7 +527,8 @@ maturity = "moderate"     # general | moderate | adult
 #   allow = ["LLViewerControl set RenderGlowStrength", "LLNotifications respond GotoURL"]
 # Each entry is a way around the defaults that a stranger could talk the agent into using: windows
 # (LLFloaterReg), menu functions (UI call) and keys and clicks (LLWindow) reach files, settings and web pages on
-# this machine. Read docs/safety.md first. The agent can't change this file.
+# this machine. Read docs/safety.md first. These hold only while the agent can't edit this file: the keeper's
+# sessions can't, and in another harness that's for its setup to see to (docs/setup.md).
 allow = []
 
 [probe]
@@ -551,13 +581,12 @@ heard_as = []             # how Whisper tends to mishear the avatar's name, e.g.
 voice_device = ""
 
 [keeper]
-# The keeper (`ibasho keeper`) runs the agent's Claude Code sessions for you: docs/keeper.md.
+# The keeper (`ibasho keeper`) runs the agent's Claude Code sessions for you, as the default setup for an agent
+# with none of its own: docs/keeper.md. An agent in a harness of its own doesn't use these settings.
 person = ""               # what the agent's wake prompt and notes call you; empty = "the person who runs Ibasho for you"
 situation = ""            # if this isn't an open-ended life (a trial, a test, a run with an end), say so plainly:
                           # what it's for, how long it lasts, what happens to the agent and its memory after.
                           # Shown at the start of every wake. The agent deserves to know what's really happening.
-life = ''                 # the agent's memory folder; empty = a "life" folder beside this file (a relative
-                          # path is from this file's folder too)
 # Caps, because tokens cost money (0 = no cap). Raise them as you like.
 hours_per_day = 4         # awake time per day, all sessions together
 sessions_per_day = 8      # sessions started per day; handoffs and restarts count
@@ -572,9 +601,10 @@ auth = "login"            # sessions use that folder's login only; "env" also pa
                           # provider settings from your environment (then they bill that key)
 
 [tools]
-# Tools: Python programs the agent writes for itself in its life folder's tools/ and runs with `ibasho tool NAME`,
-# in a Windows sandbox that sees only that folder. Off by default: read docs/tools.md (what's contained and what
-# isn't), run `ibasho tool setup`, then set enabled = true. Only you turn this on; the agent can't.
+# Tools: Python programs the agent writes for itself in its folder's tools/ and runs with `ibasho tool NAME`, in a
+# Windows sandbox that sees only that folder. Off by default: read docs/tools.md (what's contained and what isn't),
+# run `ibasho tool setup`, then set enabled = true. It's yours to turn on: the agent can't, as long as its harness
+# keeps it from editing this file (the keeper's sessions can't).
 enabled = false
 network = false           # let tools reach the internet (and, depending on how Windows sees your network, the
                           # local one); they never reach Ibasho or other programs on this machine

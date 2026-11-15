@@ -1,5 +1,7 @@
 """The keeper's commands: `ibasho keeper ...` for the person; sleep, awake, book, unbook, bookings and notes for the
-agent (notes for both: whoever runs it inside a keeper session is the agent)."""
+agent (notes for both: whoever runs it with IBASHO_SESSION set is the agent). The agent's only mean something with a
+keeper to honour them, so without one for this install (store.has_keeper, or Ibasho's keeper running) they say so
+and do nothing."""
 
 from __future__ import annotations
 
@@ -21,7 +23,8 @@ from .store import SLT, Store, active_booking, from_iso, local_now, occurrences,
 
 
 def register(sub):
-    p = sub.add_parser("keeper", help="run the agent's Claude Code sessions for you (`ibasho keeper -h`)")
+    p = sub.add_parser("keeper", help="for the person: the keeper, which runs the agent's sessions in Claude Code "
+                                      "for an agent with no setup of its own (`ibasho keeper -h`)")
     ks = p.add_subparsers(dest="keeper_command", required=True, metavar="WHAT")
     q = ks.add_parser("run", help="run the keeper in this window (Ctrl+C stops it and logs the avatar out)")
     q.add_argument("--quiet", action="store_true", help="log to keeper.log only")
@@ -37,7 +40,8 @@ def register(sub):
     q.set_defaults(fn=keeper_status)
     ks.add_parser("wake", help="cancel the agent's nap, so the keeper wakes it now").set_defaults(fn=keeper_wake)
     ks.add_parser("resume", help="clear a crash pause or a plan-limit wait").set_defaults(fn=keeper_resume)
-    ks.add_parser("setup", help="make the life folder, check Claude Code, show what sessions may do") \
+    ks.add_parser("setup", help="start the agent's folder from the life template, check Claude Code, show what "
+                                "sessions may do") \
         .set_defaults(fn=keeper_setup)
     ks.add_parser("login", help="log the agent's own Claude Code folder in (once)").set_defaults(fn=keeper_login)
     q = ks.add_parser("log", help="the keeper's log, or the latest session's")
@@ -46,16 +50,16 @@ def register(sub):
     q.set_defaults(fn=keeper_log)
 
     p = sub.add_parser("sleep", aliases=["asleep"],
-                       help="end this session: log out and nap, or --handoff to a fresh session")
+                       help="(the keeper's) end this session: log out and nap, or --handoff to a fresh session")
     p.add_argument("--until", metavar="TIME", help="nap until then ('08:00', 'tomorrow 9:30pm', '+3h'); bookings "
                                                    "can still wake me")
     p.add_argument("--slt", action="store_true", help="TIME is Second Life time")
     p.add_argument("--handoff", action="store_true",
                    help="stay logged in; a fresh session takes over from the handoff note")
     p.set_defaults(fn=sleep)
-    sub.add_parser("awake", help="cancel my nap (if a booking woke me and I'd like to stay up after it)") \
-        .set_defaults(fn=awake)
-    p = sub.add_parser("book", help="be up at a time: book START END WHY (END may be '+2h')")
+    sub.add_parser("awake", help="(the keeper's) cancel my nap (if a booking woke me and I'd like to stay up after "
+                                 "it)").set_defaults(fn=awake)
+    p = sub.add_parser("book", help="(the keeper's) be woken for a time: book START END WHY (END may be '+2h')")
     p.add_argument("start")
     p.add_argument("end")
     p.add_argument("why", nargs="+")
@@ -65,13 +69,14 @@ def register(sub):
     rep.add_argument("--weekly", action="store_true")
     p.add_argument("--until", metavar="DATE", help="last day of a repeating booking ('10-31')")
     p.set_defaults(fn=book)
-    p = sub.add_parser("unbook", help="unbook ID, or ID@YYYY-MM-DD for one day of a repeating booking")
+    p = sub.add_parser("unbook", help="(the keeper's) unbook ID, or ID@YYYY-MM-DD for one day of a repeating booking")
     p.add_argument("key")
     p.set_defaults(fn=unbook)
-    p = sub.add_parser("bookings", help="the next two weeks of bookings")
+    p = sub.add_parser("bookings", help="(the keeper's) the next two weeks of bookings")
     p.add_argument("--days", type=int, default=14)
     p.set_defaults(fn=bookings)
-    p = sub.add_parser("notes", help="notes between the person and the agent: no TEXT shows them, TEXT sends one")
+    p = sub.add_parser("notes", help="(the keeper's) notes between the person and the agent: no TEXT shows them, "
+                                     "TEXT sends one")
     p.add_argument("text", nargs="*")
     p.add_argument("-n", type=int, default=10, help="how many recent ones to show")
     p.set_defaults(fn=notes)
@@ -104,6 +109,16 @@ def keeper_running(store: Store) -> dict | None:
         return st if "keeper" in " ".join(p.cmdline()) else None
     except psutil.Error:
         return None
+
+
+def need_keeper(ctx: Ctx, what: str, instead: str = "") -> Store:
+    """The keeper's files, if a keeper looks after this install: Ibasho's, set up or running, or another that says so
+    in keeper.json. Without one, the agent's commands would write files nothing reads."""
+    store = store_of(ctx)
+    if not (store.has_keeper() or keeper_running(store)):
+        raise Fail(f"{what}, and there's no keeper for this install (docs/keeper.md)"
+                   + (f"; {instead}" if instead else ""))
+    return store
 
 
 def when(t: float | None) -> str:
@@ -218,13 +233,14 @@ def keeper_setup(ctx: Ctx, a):
     from .runner import KeeperError, claude_env, ensure_life, session_settings
     from .session import auth_status, find_claude
     cfg, ks = ctx.cfg, ks_of(ctx)
-    life = settings_mod.life_dir(cfg, ks)
+    life = cfg.agent_dir
     try:
         made = ensure_life(life)
         settings = session_settings(cfg, ks, settings_mod.keeper_dir(cfg))
     except KeeperError as e:
         raise Fail(str(e)) from None
-    print(f"life folder: {life}" + (" (made from the template)" if made else ""))
+    store_of(ctx).mark_keeper("ibasho")
+    print(f"the agent's folder, its memory: {life}" + (" (started from the life template)" if made else ""))
     claude = find_claude(ks.claude)
     if not claude:
         print("PROBLEM: Claude Code (`claude`) isn't on PATH; install it or set keeper.claude")
@@ -250,7 +266,7 @@ def keeper_setup(ctx: Ctx, a):
     print(f"sessions run in {life} with permission mode {ks.permission_mode} and {settings}:")
     print("  allowed without asking: " + ", ".join(allow.get("allow", [])))
     print("  denied: " + ", ".join(allow.get("deny", [])))
-    print("  plus Claude Code's defaults for the mode (reading and, in acceptEdits, editing files in the life folder; "
+    print("  plus Claude Code's defaults for the mode (reading and, in acceptEdits, editing files in the agent's folder; "
           "reading the shots folder). Anything else is refused, since nobody is there to approve it. "
           "docs/keeper.md has the whole picture.")
     caps = [f"{ks.hours_per_day:g} h awake a day" if ks.hours_per_day else "no daily hours cap",
@@ -301,7 +317,9 @@ def keeper_log(ctx: Ctx, a):
 # ---------- the agent's commands ----------
 
 def sleep(ctx: Ctx, a):
-    cfg, ks, store = ctx.cfg, ks_of(ctx), store_of(ctx)
+    store = need_keeper(ctx, "`ibasho sleep --handoff` asks the keeper for a fresh session" if a.handoff else
+                        "`ibasho sleep` naps until the keeper wakes the agent", "`ibasho down` logs out")
+    cfg, ks = ctx.cfg, ks_of(ctx)
     sid = in_session()
     if a.handoff and not sid:
         raise Fail("--handoff only means something inside a session the keeper started")
@@ -332,13 +350,17 @@ def sleep(ctx: Ctx, a):
               f"for it; `ibasho unbook {b['key']}` drops it")
 
 
+BOOKINGS = "bookings are times the keeper wakes the agent for"
+
+
 def awake(ctx: Ctx, a):
-    store_of(ctx).update_state(nap_until=None)
+    need_keeper(ctx, "`ibasho awake` cancels a nap the keeper keeps").update_state(nap_until=None)
     print("nap cleared")
 
 
 def book(ctx: Ctx, a):
-    ks, store = ks_of(ctx), store_of(ctx)
+    store = need_keeper(ctx, BOOKINGS)
+    ks = ks_of(ctx)
     tz = SLT if a.slt else None
     try:
         start = parse_time(a.start, tz)
@@ -356,11 +378,11 @@ def book(ctx: Ctx, a):
 
 
 def unbook(ctx: Ctx, a):
-    print("removed" if store_of(ctx).remove_booking(a.key) else "no such booking")
+    print("removed" if need_keeper(ctx, BOOKINGS).remove_booking(a.key) else "no such booking")
 
 
 def bookings(ctx: Ctx, a):
-    store = store_of(ctx)
+    store = need_keeper(ctx, BOOKINGS)
     t0 = local_now()
     occ = occurrences(store.bookings(), t0, t0 + dt.timedelta(days=a.days))
     if not occ:
@@ -371,7 +393,8 @@ def bookings(ctx: Ctx, a):
 
 
 def notes(ctx: Ctx, a):
-    cfg, ks, store = ctx.cfg, ks_of(ctx), store_of(ctx)
+    store = need_keeper(ctx, "notes go between the person and the agent by way of the keeper")
+    cfg, ks = ctx.cfg, ks_of(ctx)
     me = "agent" if in_session() else "person"
     other = "person" if me == "agent" else "agent"
     text = " ".join(a.text).strip()
@@ -380,7 +403,8 @@ def notes(ctx: Ctx, a):
             store.add_note(text, me)
         except ValueError as e:
             raise Fail(str(e)) from None
-        print("sent" + ("" if me == "agent" else " (it reaches the agent at its next turn or through its watch)"))
+        print("sent" + ("" if me == "agent" else " (the keeper passes it on: at the agent's next turn, through its "
+                                                 "watch, or when it next wakes)"))
         return
     them = prompts.person_label(ks.person) if me == "agent" else cfg.name
     msgs = store.notes()
