@@ -183,6 +183,8 @@ class Daemon:
             self.vstate.logged_in = False
             self.vstate.gate = ""        # judged afresh for the next viewer
             self.logged_out = ""
+            from .slai_ext import clear_stale_self_identity
+            clear_stale_self_identity(self)
             self.listening.clear()
             self.events.append("daemon", {"msg": "viewer disconnected"})
 
@@ -293,6 +295,8 @@ class Daemon:
                 self.vstate.logged_in = True
                 self.login_failed = False
                 self.logged_out = ""
+                from .slai_ext import clear_stale_self_identity
+                clear_stale_self_identity(self)
                 asyncio.create_task(self.on_logged_in())
         else:
             self.vstate.logged_in = False

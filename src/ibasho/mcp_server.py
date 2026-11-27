@@ -196,7 +196,7 @@ class Waiter:
         try:
             lines = []
             if self.watcher is None:
-                self.watcher = Watcher(ctx)
+                self.watcher = Watcher(ctx, wake_all_in_world=True)
                 if line := unread_line(ctx):
                     lines.append(line)
             end = time.time() + timeout
@@ -222,7 +222,6 @@ def build(config: str | None = None, bridge=None):
     from mcp.types import ToolAnnotations
 
     from . import __version__
-    from .cli import lifecycle, money
     from .cli import make
 
     server = MCPServer("ibasho", version=__version__, instructions=INSTRUCTIONS, log_level="WARNING")
@@ -267,15 +266,11 @@ def build(config: str | None = None, bridge=None):
     # ----- being there -----
 
     @tool(read_only=True)
-    async def status(context: Context):
+    async def status(context: Context, json: bool = False):
         """Is Ibasho running, am I in world (my name and avatar id), today's messages and spending against the caps,
-        my L$ balance."""
-        def job(ctx: Ctx):
-            lifecycle.status(ctx, argparse.Namespace(json=False))
-            st = ctx.api.is_up() if ctx.cfg.token_file.exists() else None
-            if st and st.get("logged_in"):
-                money.balance(ctx, argparse.Namespace())
-        return await call(context, job=job)
+        my L$ balance. json: return the raw daemon status JSON without querying L$ balance."""
+        from . import slai_ext
+        return await call(context, job=lambda ctx: slai_ext.run_status(ctx, json_output=json))
 
     @tool()
     async def up(context: Context, timeout: float = 180):
@@ -351,11 +346,14 @@ def build(config: str | None = None, bridge=None):
     # ----- hearing -----
 
     @tool(read_only=True)
-    async def wait_events(context: Context, timeout: float = WAIT_DEFAULT):
+    async def wait_events(context: Context, timeout: float = WAIT_DEFAULT, structured: bool = False):
         """Wait until something happens around me (chat, an IM, a dialog, an offer, money, a refusal) and return
         it, one line each; or after `timeout` seconds, saying it was quiet. What happens between calls is kept for
-        the next one."""
+        the next one. structured: return JSON containing raw/structured native wake metadata alongside text."""
         t = max(1.0, min(float(timeout), WAIT_MAX))
+        if structured:
+            from . import slai_ext
+            return await call(context, job=lambda ctx: slai_ext.wait_structured(waiter, ctx, t, Failed))
         return await call(context, job=lambda ctx: waiter.wait(ctx, t))
 
     @tool(read_only=True)
