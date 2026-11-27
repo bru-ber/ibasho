@@ -8,10 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import time
 from typing import Any
-
-from .api import Down
 
 _MAX_DATA_BYTES = 4096
 _SENDER_FIELDS = (
@@ -75,18 +72,41 @@ def _bound_json_value(value: Any, *, max_str: int = 1024, depth: int = 0) -> Any
 
 def serialize_wake(wake: Any) -> dict[str, Any]:
     """Serialize a ``cli.hear.Wake`` into structured metadata alongside text."""
+    line = str(getattr(wake, "line", "") or "")
     event = wake.event if isinstance(getattr(wake, "event", None), dict) else {}
     raw_data = event.get("data") if isinstance(event.get("data"), dict) else {}
+    digest_raw = getattr(wake, "digest", None)
+    digest = str(digest_raw) if digest_raw not in (None, "") else None
+    raw_who = getattr(wake, "who", None)
+    who: dict[str, Any] | None = None
+    if isinstance(raw_who, (tuple, list)) and len(raw_who) == 2:
+        who = {
+            "id": _bound_json_value(str(raw_who[0] or ""), max_str=256),
+            "name": _bound_json_value(str(raw_who[1] or ""), max_str=256),
+        }
+
     kind = str(event.get("kind") or "")
+    if not kind and digest:
+        kind = f"{digest}_digest"
+    elif not kind and not event and getattr(wake, "seq", 0) in (None, 0) and line.startswith("unread:"):
+        kind = "unread_summary"
+
     subtype = (
         raw_data.get("name")
         or raw_data.get("what")
         or raw_data.get("type")
         or (raw_data.get("msg") if kind == "daemon" else None)
     )
-    direction = raw_data.get("direction")
+    direction = raw_data.get("dir") or raw_data.get("direction")
     notification_id = raw_data.get("id") if kind == "notify" else None
     replay = bool(raw_data.get("replayed"))
+
+    raw_seq = getattr(wake, "seq", None)
+    seq = raw_seq if (raw_seq not in (None, 0) or event or digest) else None
+    raw_t = getattr(wake, "t", None)
+    if not raw_t and isinstance(event.get("t"), (int, float)):
+        raw_t = event.get("t")
+    event_t = raw_t if isinstance(raw_t, (int, float)) and not isinstance(raw_t, bool) and raw_t > 0 else None
 
     sender: dict[str, Any] = {}
     for field in _SENDER_FIELDS:
@@ -99,11 +119,13 @@ def serialize_wake(wake: Any) -> dict[str, Any]:
         bounded_data = {"_truncated": True, "keys": sorted(str(k) for k in raw_data)[:40]}
 
     return {
-        "text": str(getattr(wake, "line", "") or ""),
-        "seq": getattr(wake, "seq", None),
-        "t": getattr(wake, "t", None),
+        "text": line,
+        "seq": seq,
+        "t": event_t,
         "kind": kind or None,
         "subtype": str(subtype) if subtype not in (None, "") else None,
+        "digest": digest,
+        "who": who,
         "direction": str(direction) if direction not in (None, "") else None,
         "notification_id": str(notification_id) if notification_id not in (None, "") else None,
         "replay": replay,
@@ -112,59 +134,17 @@ def serialize_wake(wake: Any) -> dict[str, Any]:
     }
 
 
-def wait_structured(
-    waiter: Any, ctx: Any, timeout: float, failed_cls: type[Exception], since: int | None = None
-) -> str:
-    """Wait for events like ``Waiter.wait``, returning structured JSON alongside text."""
-    from .cli.hear import Watcher, unread_line
-
-    if waiter.bridge and waiter.bridge.pushing:
-        waiter.watcher = None
-        left = waiter.bridge.not_pushed()
-        msg = (
-            "(events come to you by themselves here: your host takes them as MCPL pushes, so there's no "
-            "need to wait for them. When there's nothing else to do, end your turn, and the world will "
-            "wake you" + (f"; not pushed: {', '.join(left)}" if left else "") + ")"
-        )
-        return json.dumps({"v": 1, "quiet": True, "text": msg, "events": []}, ensure_ascii=False)
-
-    if not waiter.busy.acquire(blocking=False):
-        raise failed_cls("another wait_events is still running")
-    try:
-        events: list[dict[str, Any]] = []
-        lines: list[str] = []
-        if waiter.watcher is None or since is not None:
-            waiter.watcher = Watcher(ctx, wake_all_in_world=True, since=since)
-            if line := unread_line(ctx):
-                lines.append(line)
-                events.append({
-                    "text": line,
-                    "seq": None,
-                    "t": None,
-                    "kind": "unread_summary",
-                    "subtype": None,
-                    "direction": None,
-                    "notification_id": None,
-                    "replay": False,
-                    "sender": {},
-                    "data": {},
-                })
-        end = time.time() + timeout
-        while not events and (left := end - time.time()) > 0:
-            wakes = waiter.watcher.poll_wakes(min(25.0, left))
-            for w in wakes:
-                lines.append(w.line)
-                events.append(serialize_wake(w))
-        quiet = not events
-        payload = {
-            "v": 1,
-            "quiet": quiet,
-            "text": "\n".join(lines) if lines else f"(nothing in {timeout:g} s)",
-            "events": events,
-        }
-        return json.dumps(payload, ensure_ascii=False)
-    except Down:
-        waiter.watcher = None
-        raise
-    finally:
-        waiter.busy.release()
+def wait_structured(waiter: Any, ctx: Any, timeout: float, since: int | None = None) -> str:
+    """Format collected ``Waiter`` wakes as structured JSON alongside plain text."""
+    wakes, push_msg = waiter.collect(ctx, timeout, since=since)
+    if push_msg is not None:
+        return json.dumps({"v": 1, "quiet": True, "text": push_msg, "events": []}, ensure_ascii=False)
+    events = [serialize_wake(w) for w in wakes]
+    lines = [str(getattr(w, "line", "") or "") for w in wakes]
+    payload = {
+        "v": 1,
+        "quiet": not events,
+        "text": "\n".join(lines) if lines else f"(nothing in {timeout:g} s)",
+        "events": events,
+    }
+    return json.dumps(payload, ensure_ascii=False)

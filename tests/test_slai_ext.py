@@ -230,3 +230,160 @@ def test_wait_structured_since_cursor_closes_status_gap_and_wakes_on_logout(tmp_
     wakes = watcher.poll_wakes(wait=0.1)
     assert len(wakes) == 1 and wakes[0].seq == 11
 
+
+def test_serialize_wake_native_dir_timestamp_and_digests():
+    from ibasho.cli.hear import GroupDigest, ObjectDigest, Wake
+
+    im_wake = Wake(
+        line="im Bob: hello",
+        seq=21,
+        t=1700000000.5,
+        event={
+            "kind": "im",
+            "seq": 21,
+            "t": 1700000000.5,
+            "data": {"dir": "in", "from": "Bob", "from_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", "message": "hello"},
+        },
+    )
+    im_item = slai_ext.serialize_wake(im_wake)
+    assert im_item["kind"] == "im"
+    assert im_item["direction"] == "in"
+    assert im_item["t"] == 1700000000.5
+    assert im_item["digest"] is None
+    assert im_item["who"] is None
+
+    gd = GroupDigest(None)
+    assert gd.take({
+        "seq": 22,
+        "t": 1700000010.25,
+        "kind": "im",
+        "data": {
+            "session_type": "group",
+            "session_id": "11111111-1111-1111-1111-111111111111",
+            "session_name": "Builders",
+            "dir": "in",
+            "from": "Alice",
+            "message": "check the bridge",
+        },
+    }) is False
+    g_wakes = gd.flush(force=True)
+    assert len(g_wakes) == 1
+    g_item = slai_ext.serialize_wake(g_wakes[0])
+    assert g_item["kind"] == "group_digest"
+    assert g_item["digest"] == "group"
+    assert g_item["who"] == {"id": "11111111-1111-1111-1111-111111111111", "name": "Builders"}
+    assert g_item["seq"] == 22
+    assert g_item["t"] == 1700000010.25
+
+    from ibasho.cli.hear import OBJECT_REPEAT
+
+    od = ObjectDigest(None)
+    oid = "22222222-2222-2222-2222-222222222222"
+    for i in range(OBJECT_REPEAT + 1):
+        od.take({
+            "seq": 30 + i,
+            "t": 1700000020.0 + i,
+            "kind": "chat",
+            "data": {"source": 2, "from_id": oid, "from": "Tram", "message": f"Stop {i}"},
+        })
+    o_wakes = od.flush(force=True)
+    assert len(o_wakes) == 1
+    o_item = slai_ext.serialize_wake(o_wakes[0])
+    assert o_item["kind"] == "object_digest"
+    assert o_item["digest"] == "object"
+    assert o_item["who"] == {"id": oid, "name": "Tram"}
+    assert o_item["seq"] == 30 + OBJECT_REPEAT
+    assert o_item["t"] == 1700000020.0 + OBJECT_REPEAT
+
+    unread_item = slai_ext.serialize_wake(Wake("unread: 1 IM in 1 conversation ('Bob') (`ibasho ims`)"))
+    assert unread_item["kind"] == "unread_summary"
+    assert unread_item["seq"] is None
+    assert unread_item["t"] is None
+    assert unread_item["digest"] is None
+
+
+def test_waiter_collect_unifies_plain_and_structured_paths(tmp_path):
+    import pytest
+
+    from ibasho.api import Down
+    from ibasho.mcp_server import Failed, Waiter
+
+    ev_log = [
+        {
+            "seq": 11,
+            "t": 1700000001.0,
+            "kind": "im",
+            "data": {"session_type": "p2p", "dir": "in", "from": "Bob", "message": "hi"},
+        },
+        {"seq": 12, "t": 1700000002.0, "kind": "daemon", "data": {"msg": "in world", "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}},
+    ]
+    unread_sessions = [{"unread": 2, "type": "p2p", "name": "Bob"}]
+    fail_down = False
+
+    class _FakeApi:
+        ibasho = True
+
+        def status(self, fresh=False):
+            return {"seq": 12, "self": {"id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}}
+
+        def events(self, since, wait=0):
+            if fail_down:
+                raise Down("daemon down")
+            return [e for e in ev_log if e["seq"] > since]
+
+        def op(self, svc, op, *a, **kw):
+            if svc == "IbashoIM" and op == "sessions":
+                return {"sessions": list(unread_sessions)}
+            return {"people": []}
+
+    ctx = types.SimpleNamespace(
+        api=_FakeApi(),
+        cfg=types.SimpleNamespace(name="Comp", name_words=list),
+        state_file=lambda name: tmp_path / name,
+    )
+    waiter = Waiter()
+
+    # First call (structured with since=10) initializes Watcher and returns unread summary first.
+    first_raw = slai_ext.wait_structured(waiter, ctx, 0.05, since=10)
+    first = json.loads(first_raw)
+    assert first["quiet"] is False
+    assert first["events"][0]["kind"] == "unread_summary"
+    shared_watcher = waiter.watcher
+    assert shared_watcher is not None and shared_watcher.since == 10
+
+    # Plain-text wait reuses the same Watcher instance and cursor.
+    unread_sessions.clear()
+    plain = waiter.wait(ctx, 0.05)
+    assert waiter.watcher is shared_watcher
+    assert "hi" in plain and "in world" in plain
+    assert shared_watcher.since == 12
+
+    # Quiet timeout formats consistently for both modes.
+    assert waiter.wait(ctx, 0.0) == "(nothing in 0 s)"
+    quiet_obj = json.loads(slai_ext.wait_structured(waiter, ctx, 0.0))
+    assert quiet_obj == {"v": 1, "quiet": True, "text": "(nothing in 0 s)", "events": []}
+
+    # Busy lock raises Failed for both plain and structured waits.
+    assert waiter.busy.acquire(blocking=False)
+    try:
+        with pytest.raises(Failed, match="another wait_events is still running"):
+            slai_ext.wait_structured(waiter, ctx, 0.05)
+    finally:
+        waiter.busy.release()
+
+    # Down resets waiter.watcher so the next call re-initializes from cursor.
+    fail_down = True
+    with pytest.raises(Down):
+        slai_ext.wait_structured(waiter, ctx, 0.05)
+    assert waiter.watcher is None
+
+    # MCPL push bridge short-circuits both plain and structured modes identically.
+    bridge = types.SimpleNamespace(pushing=True, not_pushed=lambda: ["ibasho.chat"])
+    push_waiter = Waiter(bridge=bridge)
+    plain_push = push_waiter.wait(ctx, 1.0)
+    struct_push = json.loads(slai_ext.wait_structured(push_waiter, ctx, 1.0))
+    assert struct_push["quiet"] is True
+    assert struct_push["events"] == []
+    assert struct_push["text"] == plain_push
+
+
