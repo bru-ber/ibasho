@@ -111,7 +111,7 @@ def wake_worthy(e: dict, me: str | None, money_events: bool = False) -> bool:
             (d.get("method") == "runtime.debug" and (d.get("params") or {}).get("channel") == "debug")
     if k == "daemon":
         msg = str(d.get("msg") or "")
-        return "disconnected" in msg or "closing" in msg or "flag" in msg
+        return "disconnected" in msg or "closing" in msg or "flag" in msg or "logged out" in msg
     if k == "startup":
         return bool(d.get("after_failure"))
     if k in ("autopilot", "object_created", "object_properties", "move_done"):
@@ -428,17 +428,21 @@ class Watcher:
     dialogs and refusals already shown, whether it's crowded. `watch` polls one in a loop; a harness that can't keep
     a process running between turns (the MCP server) keeps one and polls it on each wait."""
 
-    def __init__(self, ctx: Ctx, *, wake_all_in_world: bool = False):
+    def __init__(self, ctx: Ctx, *, wake_all_in_world: bool = False, since: int | None = None):
         self.ctx = ctx
         st = ctx.api.status(fresh=True)
         self.since = st["seq"]
         self.cursor = ctx.state_file("watch.cursor")
-        try:  # a re-armed watch picks up where the last one stopped, if that was recent
-            prev, t = (float(v) for v in self.cursor.read_text().split())
-            if time.time() - t < 600 and prev <= self.since:
-                self.since = int(prev)
-        except (OSError, ValueError):
-            pass
+        if since is not None:
+            if 0 <= int(since) <= self.since:
+                self.since = int(since)
+        else:
+            try:  # a re-armed watch picks up where the last one stopped, if that was recent
+                prev, t = (float(v) for v in self.cursor.read_text().split())
+                if time.time() - t < 600 and prev <= self.since:
+                    self.since = int(prev)
+            except (OSError, ValueError):
+                pass
         self.me = (st.get("self") or {}).get("id")
         self.me_re = mentions(st)
         self.groups = GroupDigest(self.me_re)

@@ -112,7 +112,9 @@ def serialize_wake(wake: Any) -> dict[str, Any]:
     }
 
 
-def wait_structured(waiter: Any, ctx: Any, timeout: float, failed_cls: type[Exception]) -> str:
+def wait_structured(
+    waiter: Any, ctx: Any, timeout: float, failed_cls: type[Exception], since: int | None = None
+) -> str:
     """Wait for events like ``Waiter.wait``, returning structured JSON alongside text."""
     from .cli.hear import Watcher, unread_line
 
@@ -131,8 +133,8 @@ def wait_structured(waiter: Any, ctx: Any, timeout: float, failed_cls: type[Exce
     try:
         events: list[dict[str, Any]] = []
         lines: list[str] = []
-        if waiter.watcher is None:
-            waiter.watcher = Watcher(ctx, wake_all_in_world=True)
+        if waiter.watcher is None or since is not None:
+            waiter.watcher = Watcher(ctx, wake_all_in_world=True, since=since)
             if line := unread_line(ctx):
                 lines.append(line)
                 events.append({

@@ -346,14 +346,16 @@ def build(config: str | None = None, bridge=None):
     # ----- hearing -----
 
     @tool(read_only=True)
-    async def wait_events(context: Context, timeout: float = WAIT_DEFAULT, structured: bool = False):
+    async def wait_events(
+        context: Context, timeout: float = WAIT_DEFAULT, structured: bool = False, since: int | None = None
+    ):
         """Wait until something happens around me (chat, an IM, a dialog, an offer, money, a refusal) and return
         it, one line each; or after `timeout` seconds, saying it was quiet. What happens between calls is kept for
         the next one. structured: return JSON containing raw/structured native wake metadata alongside text."""
         t = max(1.0, min(float(timeout), WAIT_MAX))
         if structured:
             from . import slai_ext
-            return await call(context, job=lambda ctx: slai_ext.wait_structured(waiter, ctx, t, Failed))
+            return await call(context, job=lambda ctx: slai_ext.wait_structured(waiter, ctx, t, Failed, since=since))
         return await call(context, job=lambda ctx: waiter.wait(ctx, t))
 
     @tool(read_only=True)

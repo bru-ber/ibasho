@@ -159,3 +159,74 @@ def test_mcp_status_json_and_wait_events_structured(world_connected):
             assert any(e["kind"] == "daemon" and e["subtype"] == "in world" for e in ev_obj["events"])
 
     asyncio.run(exercise())
+
+
+def test_daemon_logout_and_relogin_after_logged_out_note():
+    from ibasho.daemon import Daemon
+
+    d = object.__new__(Daemon)
+    d.login_state = "STATE_STARTED"
+    d.login_failed = False
+    d.logged_out = ""
+    d.self_id = "11111111-1111-1111-1111-111111111111"
+    d.self_names = {"display_name": "Comp"}
+    d.vstate = types.SimpleNamespace(logged_in=True)
+    appended = []
+    d.events = types.SimpleNamespace(append=lambda kind, data: appended.append((kind, data)))
+    relogins = []
+
+    async def fake_on_logged_in():
+        relogins.append(True)
+
+    d.on_logged_in = fake_on_logged_in
+
+    # Normal logout to login screen clears stale identity and emits daemon logged-out event.
+    d.on_startup_state({"str": "STATE_LOGIN_WAIT"})
+    assert d.vstate.logged_in is False
+    assert d.self_id == "" and d.self_names == {}
+    assert any(k == "daemon" and dta.get("msg") == "viewer logged out" for k, dta in appended)
+
+    # Grid YouHaveBeenLoggedOut followed by fresh STATE_STARTED triggers on_logged_in().
+    d.vstate.logged_in = True
+    d.logged_out = "You have been logged out"
+
+    async def run_relogin():
+        d.on_startup_state({"str": "STATE_STARTED"})
+        await asyncio.sleep(0)
+
+    asyncio.run(run_relogin())
+    assert d.logged_out == "" and relogins == [True]
+
+
+def test_wait_structured_since_cursor_closes_status_gap_and_wakes_on_logout(tmp_path):
+    from ibasho.cli.hear import Watcher, wake_worthy
+
+    assert wake_worthy({"kind": "daemon", "data": {"msg": "viewer logged out"}}, me=None) is True
+
+    # Simulate event seq=11 arriving between status(seq=10) and wait_events(since=10).
+    all_events = [
+        {"seq": 11, "t": 1.0, "kind": "daemon", "data": {"msg": "in world", "id": "11111111-1111-1111-1111-111111111111"}},
+    ]
+
+    class _FakeApi:
+        ibasho = True
+
+        def status(self, fresh=False):
+            return {"seq": 11, "self": {"id": "11111111-1111-1111-1111-111111111111"}}
+
+        def events(self, since, wait=0):
+            return [e for e in all_events if e["seq"] > since]
+
+        def op(self, *a, **kw):
+            return {"people": [], "sessions": []}
+
+    ctx = types.SimpleNamespace(
+        api=_FakeApi(),
+        cfg=types.SimpleNamespace(name="Comp", name_words=lambda: []),
+        state_file=lambda name: tmp_path / name,
+    )
+    watcher = Watcher(ctx, wake_all_in_world=True, since=10)
+    assert watcher.since == 10
+    wakes = watcher.poll_wakes(wait=0.1)
+    assert len(wakes) == 1 and wakes[0].seq == 11
+

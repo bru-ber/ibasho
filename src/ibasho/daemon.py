@@ -191,6 +191,10 @@ class Daemon:
     async def on_viewer(self, peer: LeapPeer):
         self.connected_at = time.time()
         self.login_state, self.login_failed = "", False   # the last viewer's, not this one's
+        self.vstate.logged_in = False
+        self.logged_out = ""
+        from .slai_ext import clear_stale_self_identity
+        clear_stale_self_identity(self)
         self.events.append("daemon", {"msg": "viewer connected", "pid": peer.viewer_pid})
         # Fixed listener names: after a daemon restart the viewer still holds the old registrations (the stub
         # kept its connection to the viewer), so a re-listen is refused rather than doubling every event.
@@ -291,7 +295,7 @@ class Daemon:
         state = str((data or {}).get("str") or "")
         prev, self.login_state = self.login_state, state
         if state == "STATE_STARTED":
-            if not self.vstate.logged_in:
+            if not self.vstate.logged_in or self.logged_out:
                 self.vstate.logged_in = True
                 self.login_failed = False
                 self.logged_out = ""
@@ -299,7 +303,12 @@ class Daemon:
                 clear_stale_self_identity(self)
                 asyncio.create_task(self.on_logged_in())
         else:
+            was_logged_in = self.vstate.logged_in
             self.vstate.logged_in = False
+            if was_logged_in:
+                from .slai_ext import clear_stale_self_identity
+                clear_stale_self_identity(self)
+                self.events.append("daemon", {"msg": "viewer logged out"})
             if state in LOGIN_SCREEN and prev and prev not in LOGIN_SCREEN and prev != "STATE_FIRST" \
                     and prev != "STATE_BROWSER_INIT":
                 self.login_failed = True
