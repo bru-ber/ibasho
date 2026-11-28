@@ -111,7 +111,7 @@ def wake_worthy(e: dict, me: str | None, money_events: bool = False) -> bool:
             (d.get("method") == "runtime.debug" and (d.get("params") or {}).get("channel") == "debug")
     if k == "daemon":
         msg = str(d.get("msg") or "")
-        return "disconnected" in msg or "closing" in msg or "flag" in msg
+        return "disconnected" in msg or "closing" in msg or "flag" in msg or "logged out" in msg
     if k == "startup":
         return bool(d.get("after_failure"))
     if k in ("autopilot", "object_created", "object_properties", "move_done"):
@@ -428,17 +428,21 @@ class Watcher:
     dialogs and refusals already shown, whether it's crowded. `watch` polls one in a loop; a harness that can't keep
     a process running between turns (the MCP server) keeps one and polls it on each wait."""
 
-    def __init__(self, ctx: Ctx):
+    def __init__(self, ctx: Ctx, *, wake_all_in_world: bool = False, since: int | None = None):
         self.ctx = ctx
         st = ctx.api.status(fresh=True)
         self.since = st["seq"]
         self.cursor = ctx.state_file("watch.cursor")
-        try:  # a re-armed watch picks up where the last one stopped, if that was recent
-            prev, t = (float(v) for v in self.cursor.read_text().split())
-            if time.time() - t < 600 and prev <= self.since:
-                self.since = int(prev)
-        except (OSError, ValueError):
-            pass
+        if since is not None:
+            if 0 <= int(since) <= self.since:
+                self.since = int(since)
+        else:
+            try:  # a re-armed watch picks up where the last one stopped, if that was recent
+                prev, t = (float(v) for v in self.cursor.read_text().split())
+                if time.time() - t < 600 and prev <= self.since:
+                    self.since = int(prev)
+            except (OSError, ValueError):
+                pass
         self.me = (st.get("self") or {}).get("id")
         self.me_re = mentions(st)
         self.groups = GroupDigest(self.me_re)
@@ -447,6 +451,7 @@ class Watcher:
         self.crowd, self.crowd_at, self.last_said = False, 0.0, 0.0
         self.shown: dict[str, float] = {}
         self.lost = False   # the viewer's connection was lost, and this watch said so
+        self.wake_all_in_world = bool(wake_all_in_world)
 
     def poll(self, wait: float = 25) -> list[str]:
         """Lines worth waking for: group digests now due, else what the next batch of events (within `wait` seconds)
@@ -491,8 +496,8 @@ class Watcher:
             if not self.groups.take(e):
                 return None
             return self.wake_for(e, named=named, talking=self.groups.talking(d.get("session_id")))
-        if e["kind"] == "daemon" and d.get("msg") == "in world" and self.lost:
-            self.lost = False   # back after a lost connection this watch reported: say so
+        if e["kind"] == "daemon" and d.get("msg") == "in world" and (self.lost or self.wake_all_in_world):
+            self.lost = False   # back after a lost connection (or wait_events unconditional wake)
             return self.wake_for(e)
         if not wake_worthy(e, self.me, self.ctx.api.ibasho):
             return None

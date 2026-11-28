@@ -183,31 +183,38 @@ class Waiter:
         self.busy = threading.Lock()
         self.bridge = bridge   # mcpl.Bridge: with an MCPL host pushing events, there's nothing to wait for here
 
-    def wait(self, ctx: Ctx, timeout: float) -> str:
-        from .cli.hear import Watcher, unread_line
+    def collect(self, ctx: Ctx, timeout: float, *, since: int | None = None) -> tuple[list, str | None]:
+        from .cli.hear import Wake, Watcher, unread_line
         if self.bridge and self.bridge.pushing:
             self.watcher = None   # the pushes read the events now; a wait after they stop starts from the cursor
             left = self.bridge.not_pushed()
-            return ("(events come to you by themselves here: your host takes them as MCPL pushes, so there's no "
-                    "need to wait for them. When there's nothing else to do, end your turn, and the world will "
-                    "wake you" + (f"; not pushed: {', '.join(left)}" if left else "") + ")")
+            msg = ("(events come to you by themselves here: your host takes them as MCPL pushes, so there's no "
+                   "need to wait for them. When there's nothing else to do, end your turn, and the world will "
+                   "wake you" + (f"; not pushed: {', '.join(left)}" if left else "") + ")")
+            return [], msg
         if not self.busy.acquire(blocking=False):
             raise Failed("another wait_events is still running")
         try:
-            lines = []
-            if self.watcher is None:
-                self.watcher = Watcher(ctx)
+            wakes = []
+            if self.watcher is None or since is not None:
+                self.watcher = Watcher(ctx, wake_all_in_world=True, since=since)
                 if line := unread_line(ctx):
-                    lines.append(line)
+                    wakes.append(Wake(line))
             end = time.time() + timeout
-            while not lines and (left := end - time.time()) > 0:
-                lines = self.watcher.poll(min(25.0, left))
-            return "\n".join(lines) or f"(nothing in {timeout:g} s)"
+            while not wakes and (left := end - time.time()) > 0:
+                wakes = self.watcher.poll_wakes(min(25.0, left))
+            return wakes, None
         except Down:
             self.watcher = None   # a daemon started afresh: begin again from the cursor file
             raise
         finally:
             self.busy.release()
+
+    def wait(self, ctx: Ctx, timeout: float, *, since: int | None = None) -> str:
+        wakes, push_msg = self.collect(ctx, timeout, since=since)
+        if push_msg is not None:
+            return push_msg
+        return "\n".join(w.line for w in wakes) or f"(nothing in {timeout:g} s)"
 
 
 # ---------- the server ----------
@@ -222,7 +229,6 @@ def build(config: str | None = None, bridge=None):
     from mcp.types import ToolAnnotations
 
     from . import __version__
-    from .cli import lifecycle, money
     from .cli import make
 
     server = MCPServer("ibasho", version=__version__, instructions=INSTRUCTIONS, log_level="WARNING")
@@ -267,15 +273,11 @@ def build(config: str | None = None, bridge=None):
     # ----- being there -----
 
     @tool(read_only=True)
-    async def status(context: Context):
+    async def status(context: Context, json: bool = False):
         """Is Ibasho running, am I in world (my name and avatar id), today's messages and spending against the caps,
-        my L$ balance."""
-        def job(ctx: Ctx):
-            lifecycle.status(ctx, argparse.Namespace(json=False))
-            st = ctx.api.is_up() if ctx.cfg.token_file.exists() else None
-            if st and st.get("logged_in"):
-                money.balance(ctx, argparse.Namespace())
-        return await call(context, job=job)
+        my L$ balance. json: return the raw daemon status JSON without querying L$ balance."""
+        from . import slai_ext
+        return await call(context, job=lambda ctx: slai_ext.run_status(ctx, json_output=json))
 
     @tool()
     async def up(context: Context, timeout: float = 180):
@@ -351,12 +353,17 @@ def build(config: str | None = None, bridge=None):
     # ----- hearing -----
 
     @tool(read_only=True)
-    async def wait_events(context: Context, timeout: float = WAIT_DEFAULT):
+    async def wait_events(
+        context: Context, timeout: float = WAIT_DEFAULT, structured: bool = False, since: int | None = None
+    ):
         """Wait until something happens around me (chat, an IM, a dialog, an offer, money, a refusal) and return
         it, one line each; or after `timeout` seconds, saying it was quiet. What happens between calls is kept for
-        the next one."""
+        the next one. structured: return JSON containing raw/structured native wake metadata alongside text."""
         t = max(1.0, min(float(timeout), WAIT_MAX))
-        return await call(context, job=lambda ctx: waiter.wait(ctx, t))
+        if structured:
+            from . import slai_ext
+            return await call(context, job=lambda ctx: slai_ext.wait_structured(waiter, ctx, t, since=since))
+        return await call(context, job=lambda ctx: waiter.wait(ctx, t, since=since))
 
     @tool(read_only=True)
     async def listen(context: Context, secs: float = WAIT_DEFAULT, settle: float | None = None,
