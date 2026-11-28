@@ -148,15 +148,23 @@ def test_mcp_status_json_and_wait_events_structured(world_connected):
             st_obj = json.loads(st_text)
             assert st_obj["logged_in"] is True
             assert st_obj["self"]["id"] == w.viewer.self_id
+            assert isinstance(st_obj.get("seq"), int) and not isinstance(st_obj.get("seq"), bool)
             assert "L$" not in st_text
+            before_seq = st_obj["seq"]
 
             w.call(w.daemon.events.append, "daemon", {"msg": "in world"})
-            ev_res = await client.call_tool("wait_events", {"timeout": 2, "structured": True})
+            ev_res = await client.call_tool(
+                "wait_events",
+                {"timeout": 2, "structured": True, "since": before_seq},
+            )
             ev_text = "\n".join(b.text for b in ev_res.content if getattr(b, "type", "") == "text")
             ev_obj = json.loads(ev_text)
             assert ev_obj["v"] == 1
             assert ev_obj["quiet"] is False
-            assert any(e["kind"] == "daemon" and e["subtype"] == "in world" for e in ev_obj["events"])
+            assert any(
+                e["kind"] == "daemon" and e["subtype"] == "in world" and e["seq"] > before_seq
+                for e in ev_obj["events"]
+            )
 
     asyncio.run(exercise())
 
